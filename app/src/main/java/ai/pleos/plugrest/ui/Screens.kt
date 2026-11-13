@@ -367,7 +367,7 @@ fun RestingScreen(p: Phase.Resting, s: VehicleState, remaining: Int?, learned: I
                 if (remaining == null) CalculatingText("계산 중", style = if (wide) T.displayL else T.titleL, color = dim)
                 else Text("약 ${remaining}분", style = T.displayL, color = C.restText, maxLines = 1, softWrap = false)
             }
-            if (remaining == null && learnedEta != null) Text("지난 충전 기준 약 ${learnedEta}분", style = T.bodyS, color = dim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            if (remaining == null) Text(if (learnedEta != null) "지난 충전 기준 약 ${learnedEta}분" else "배터리가 오르면 계산돼요", style = T.bodyS, color = dim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(D.gap))
         }
         // 디자인 ⑫ M1: 선라이즈 문구는 하단 상태줄 첫 줄(헤더의 데모 고지는 유지)
@@ -404,19 +404,23 @@ fun RestoringScreen(p: Phase.Restoring, s: VehicleState, now: Long, onCancel: ()
         }
         return
     }
-    Screen(C.bgRest, Modifier.pointerInput(Unit) { detectTapGestures { onTouch() } }) {
-        Text(if (p.reason == EndReason.DEPARTURE) "출발 시각" else p.reason.title(p.target), style = T.labelM, color = C.restTextDim) // Restoring 라벨은 "출발 시각", Done 제목만 "출발 시각이에요"
-        Spacer(Modifier.height(D.gap))
-        if (p.reason == EndReason.TARGET_REACHED) Text("목표 ${p.target}%에 도달했습니다", style = T.bodyL, color = C.restText, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        if (p.reason == EndReason.DEPARTURE) Text("출발 시각입니다 · 배터리 ${s.soc ?: "--"}%", style = T.bodyL, color = C.restText, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        if (p.reason == EndReason.CHARGING_DONE) Text("충전이 끝났어요 · 배터리 ${s.soc ?: "--"}%", style = T.bodyL, color = C.restText, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Text("${secs}초 후 원래대로", style = T.bodyL, color = C.restText, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("$secs", style = T.displayXL, color = C.restText)
-            Text("초", style = T.titleL, color = C.restTextDim)
-        }
-        if (s.seatMoving) Text("시트 이동 중 · 누르면 멈춤", style = T.bodyS, color = C.restTextDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Text("취소하면 그대로 둬요", style = T.bodyS, color = C.restTextDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    // 1열 통일: 상단 헤더 뱃지 / 가운데 제목 + 큰 카운트 / 하단 취소 (Resting·Done과 같은 골격)
+    val headerBadges = buildList {
+        add(Badge(CabinIcon.MOON, if (p.reason == EndReason.DEPARTURE) "출발 시각" else if (p.reason == EndReason.CHARGING_DONE) "충전 끝" else "목표 ${p.target}%", tint = C.restText))
+        if (BuildConfig.DEMO) add(Badge(CabinIcon.CLOCK, "시간 단축 데모", tint = C.warn.copy(alpha = 0.8f)))
+    }
+    Screen(C.bgRest, Modifier.pointerInput(Unit) { detectTapGestures { onTouch() } }, hero = {
+        HeaderRow(headerBadges, bg = C.surfaceRest, active = C.restText, muted = C.restTextDim, showBrand = false)
+    }) { _ ->
+        Spacer(Modifier.weight(0.6f))
+        Text(when (p.reason) { EndReason.DEPARTURE -> "출발 시각이에요"; EndReason.CHARGING_DONE -> "충전이 끝났어요"; else -> "목표 ${p.target}%에 닿았어요" }, style = T.headlineL, color = C.restText, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(D.gap / 2))
+        Text(if (p.reason == EndReason.TARGET_REACHED) "곧 원래대로 돌려놔요" else "배터리 ${s.soc ?: "--"}% · 곧 원래대로 돌려놔요", style = T.bodyL, color = C.restTextDim, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(D.section))
+        Text("$secs", style = T.displayXL, color = C.restText)
+        Text("초", style = T.titleL, color = C.restTextDim)
+        Spacer(Modifier.weight(1f))
+        Text(if (s.seatMoving) "시트 이동 중 · 누르면 멈춤" else "취소하면 그대로 둬요", style = T.bodyS, color = C.restTextDim, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(D.gap))
         BigButton("취소", onCancel, bg = C.surfaceRest, fg = C.restText)
     }

@@ -22,12 +22,12 @@
 - 참가 부문: 일반(스타트업 포함)
 - 프로젝트명: 충전쉼표
 - 앱명: 충전쉼표 (Plug & Rest)
-- 한 줄 소개: 충전하는 동안, 차가 휴식 공간으로 바뀝니다
+- 한 줄 소개: 출발 시각에 맞춰 차가 깨워 주는 충전 휴식 앱
 
 [첨부]
 1. 접수양식(01 참가신청서 / 02 앱 소개 / 03 개인정보 동의 / 04 동의 확인 및 서명) — 접수양식_충전쉼표_draft.docx
 2. {선택} 앱 소개 시안 — 화면시안_충전쉼표.pdf
-3. 시연 영상 — demo_fake_v1.mp4 (76초, 약 1.6MB, Fake 차량 모드·시간 단축 데모)
+3. 시연 영상 — demo_pleos_v1.mp4 (약 3분, Pleos Connect 에뮬레이터 실녹화·음성 안내 포함·시간 단축 데모) {녹화 전까지는 demo_fake_v1.mp4}
 
 [선택 제출물 링크]
 - GitHub: https://github.com/plugrest/plugrest
@@ -77,7 +77,7 @@
 - 앱명: 충전쉼표 (Plug & Rest)
 - 수정 내용: {예: 02 앱 소개 4·6번 보완, APK 갱신}
 
-[첨부] 접수양식_충전쉼표_final.docx(01~04, 서명 포함), {선택} 화면시안_충전쉼표.pdf, 시연 영상 demo_fake_v1.mp4
+[첨부] 접수양식_충전쉼표_final.docx(01~04, 서명 포함), {선택} 화면시안_충전쉼표.pdf, 시연 영상 demo_pleos_v1.mp4
 [링크] GitHub https://github.com/plugrest/plugrest / APK apk/충전쉼표_PlugRest_release.apk / 숏폼 {URL}
 
 감사합니다.
