@@ -31,35 +31,52 @@ def run(args):
         return
     sys.exit("ffmpeg hung 3 times")
 
-def font(size, bold=False): return ImageFont.truetype(FONT, size, index=6 if bold else 0)
+def font(size, weight="regular"):
+    idx = {"regular": 0, "medium": 2, "semibold": 4, "bold": 6}[weight if isinstance(weight, str) else ("bold" if weight else "regular")]
+    return ImageFont.truetype(FONT, size, index=idx)
 
-def text_png(name, items, align="center", pad=24, bg=None, radius=0):
-    """items = [(text, size, color, bold)] 줄 단위. 캔버스는 글자에 맞춰 자동."""
-    fs = [font(s, b) for _, s, _, b in items]
-    d0 = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    boxes = [d0.textbbox((0, 0), t, font=f) for (t, *_), f in zip(items, fs)]
-    ws = [b[2] - b[0] for b in boxes]; hs = [int(s * 1.25) for _, s, _, _ in items]
+def _draw_spaced(d, xy, text, f, fill, spacing):
+    x, y = xy
+    for ch in text:
+        d.text((x, y), ch, font=f, fill=fill); x += f.getlength(ch) + spacing
+
+def text_png(name, items, align="center", pad=24, bg=None, radius=0, shadow=False):
+    """items = [(text, size, color, weight)] 줄 단위. weight: bold/semibold/medium/regular(또는 True/False).
+    자간은 크기에 비례해 살짝 좁힌다(한글 헤드라인). shadow=True면 사진 위 가독성용 부드러운 그림자."""
+    fs = [font(s, wgt) for _, s, _, wgt in items]
+    sp = [-round(s * 0.04) for _, s, _, _ in items]
+    ws = [int(sum(f.getlength(ch) for ch in t) + k * (len(t) - 1)) for (t, *_), f, k in zip(items, fs, sp)]
+    hs = [int(s * 1.32) for _, s, _, _ in items]
     w, h = max(ws) + pad * 2, sum(hs) + pad * 2
-    im = Image.new("RGBA", (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-    if bg: d.rounded_rectangle((0, 0, w - 1, h - 1), radius, fill=bg + (255,))
-    y = pad
-    for (t, s, c, b), f, bw, bh, bx in zip(items, fs, ws, hs, boxes):
-        x = pad if align == "left" else (w - bw) // 2 - bx[0]
-        d.text((x, y - bx[1] + (bh - (bx[3] - bx[1])) // 2), t, font=f, fill=c + (255,))
-        y += bh
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    if bg: ImageDraw.Draw(im).rounded_rectangle((0, 0, w - 1, h - 1), radius, fill=bg + (255,))
+    def paint(layer, color_of, dx=0, dy=0):
+        d = ImageDraw.Draw(layer); y = pad
+        for (t, s, c, _), f, bw, bh, k in zip(items, fs, ws, hs, sp):
+            x = pad if align == "left" else (w - bw) // 2
+            _draw_spaced(d, (x + dx, y + dy + (bh - s) // 2 - int(s * 0.12)), t, f, color_of(c), k); y += bh
+    if shadow:
+        sh = Image.new("RGBA", (w, h), (0, 0, 0, 0)); paint(sh, lambda c: (0, 0, 0, 200), 0, 6)
+        im = Image.alpha_composite(im, sh.filter(ImageFilter.GaussianBlur(10)))
+    paint(im, lambda c: c + (255,))
     p = os.path.join(T, name); im.save(p); return p, w, h
 
 def chip(name, text, size=40):
     return text_png(name, [(text, size, WHITE, True)], pad=22, bg=DARK, radius=40)
 
 def device_assets():
-    dw, dh = 900, 1023
+    dw, dh = 900, 965  # 1100x1180 → 900 폭
     m = Image.new("L", (dw, dh), 0); ImageDraw.Draw(m).rounded_rectangle((0, 0, dw - 1, dh - 1), 36, fill=255)
+    px = m.load(); top, bot = 150, 200  # 위아래를 배경으로 서서히 녹임
+    for y in range(dh):
+        a = 1.0
+        if y < top: a = y / top
+        elif y > dh - bot: a = (dh - y) / bot
+        a = a * a * (3 - 2 * a)  # smoothstep
+        if a < 1:
+            for x in range(dw): px[x, y] = int(px[x, y] * a)
     mp = os.path.join(T, "mask.png"); m.save(mp)
-    sh = Image.new("RGBA", (dw + 160, dh + 160), (0, 0, 0, 0))
-    ImageDraw.Draw(sh).rounded_rectangle((80, 100, dw + 80, dh + 100), 36, fill=(0, 0, 0, 170))
-    sh = sh.filter(ImageFilter.GaussianBlur(40)); sp = os.path.join(T, "shadow.png"); sh.save(sp)
-    return mp, sp, dw, dh
+    return mp, None, dw, dh
 
 def prep_footage():
     """에뮬레이터 webm → 앱 영역(오른쪽 1707px) 30fps mp4 (캐시: 같은 폴더 .cache)"""
@@ -112,12 +129,13 @@ def kenburns(sc, img, dark=0.5, zoom_per_frame=0.0006):
                  f"drawbox=x=0:y=0:w={W}:h={H}:color=0x{BG}@{dark}:t=fill[kb]"); sc.base("kb")
 
 def device(sc, foot, start, end, speed, y0, rise=False, audio=False):
-    mp, sp, dw, dh = ASSETS
+    mp, _, dw, dh = ASSETS
     i = sc.add_input(["-ss", str(start), "-t", str(end - start), "-i", foot])
-    m = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", mp]); s = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", sp])
-    sc.fc.append(f"[{i}:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},crop=1100:1250:303:70,scale={dw}:{dh}[app];[{m}:v]format=gray[mk];[app][mk]alphamerge[dev]")
+    m = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", mp])
+    # 앱 영역에서 상태바(0~100)와 내비바(1280~)를 뺀 가운데 1100x1180만
+    sc.fc.append(f"[{i}:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},crop=1100:1180:303:100,scale={dw}:{dh}[app];[{m}:v]format=gray[mk];[app][mk]alphamerge[dev]")
     y = device_rise(y0) if rise else str(y0)
-    sc.fc.append(f"[{s}:v]format=rgba[shd];[{sc.last}][shd]overlay=x={(W-dw)//2-80}:y='({y})-100':eval=frame[sh1];[sh1][dev]overlay=x={(W-dw)//2}:y='{y}':eval=frame[dv]"); sc.base("dv")
+    sc.fc.append(f"[{sc.last}][dev]overlay=x={(W-dw)//2}:y='{y}':eval=frame[dv]"); sc.base("dv")
     if audio: sc.audio = f"[{i}:a]asetpts=PTS-STARTPTS"
 
 def center(w): return "(W-w)/2"  # overlay 식: 팝 애니메이션(가변 폭)에도 가운데 유지
@@ -131,30 +149,30 @@ def build():
 
     # 1 훅: 키네틱 텍스트
     sc = Scene("s1", 3.8); kenburns(sc, NR, dark=0.35, zoom_per_frame=0.0012)
-    p, w, h = text_png("h1.png", [("알람", 170, WHITE, True)]); sc.layer(p, center(w), 620, 0.1, 0.2, pop=True)
-    p, w, h = text_png("h2.png", [("맞추지 마세요.", 120, WHITE, True)]); sc.layer(p, center(w), 830, 0.55, 0.2, pop=True)
-    p, w, h = text_png("h3.png", [("출발 시각엔 차가 깨워요.", 76, MINT, True)]); sc.layer(p, center(w), ease_up(1060, 1.7), 1.7, 0.35)
+    p, w, h = text_png("h1.png", [("알람", 170, WHITE, True)], shadow=True); sc.layer(p, center(w), 620, 0.1, 0.2, pop=True)
+    p, w, h = text_png("h2.png", [("맞추지 마세요.", 120, WHITE, True)], shadow=True); sc.layer(p, center(w), 830, 0.55, 0.2, pop=True)
+    p, w, h = text_png("h3.png", [("출발 시각엔 차가 깨워요.", 76, MINT, True)], shadow=True); sc.layer(p, center(w), ease_up(1060, 1.7), 1.7, 0.35)
     scenes.append(sc)
 
     # 2 문제
     sc = Scene("s2", 4.4); kenburns(sc, NW, dark=0.42)
-    p, w, h = text_png("p1.png", [("충전하는 동안,", 80, WHITE, True)]); sc.layer(p, center(w), ease_up(640, 0.2), 0.2)
-    p, w, h = text_png("p2.png", [("시트는 손으로 젖히고", 64, GRAY, False)]); sc.layer(p, center(w), ease_up(790, 1.0), 1.0)
-    p, w, h = text_png("p3.png", [("알람은 폰으로 맞추고", 64, GRAY, False)]); sc.layer(p, center(w), ease_up(880, 1.7), 1.7)
-    p, w, h = text_png("p4.png", [("그럴 필요 없어요.", 76, AMBER, True)]); sc.layer(p, center(w), ease_up(1060, 2.7), 2.7, pop=False)
+    p, w, h = text_png("p1.png", [("충전하는 동안,", 80, WHITE, True)], shadow=True); sc.layer(p, center(w), ease_up(640, 0.2), 0.2)
+    p, w, h = text_png("p2.png", [("시트는 손으로 젖히고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), ease_up(790, 1.0), 1.0)
+    p, w, h = text_png("p3.png", [("알람은 폰으로 맞추고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), ease_up(880, 1.7), 1.7)
+    p, w, h = text_png("p4.png", [("그럴 필요 없어요.", 76, AMBER, True)], shadow=True); sc.layer(p, center(w), ease_up(1060, 2.7), 2.7, pop=False)
     scenes.append(sc)
 
-    DY = 600  # 기기 프레임 y
+    DY = 620  # 기기 프레임 y (965 높이 → 1585까지)
     # 3 해결: 출발 시각 고르기 (A 47–59.5, 2배속)
     sc = Scene("s3", 6.3); solid(sc); device(sc, F["A"], 47, 59.5, 2, DY, rise=True)
     p, w, h = text_png("c3a.png", [("출발 시각만 고르세요", 78, MINT, True)]); sc.layer(p, center(w), ease_up(300, 0.6), 0.6, pop=True)
-    p, w, h = text_png("c3b.png", [("10분 후 · 한 번 탭", 46, GRAY, False)]); sc.layer(p, center(w), ease_up(420, 1.3), 1.3)
+    p, w, h = text_png("c3b.png", [("10분 후, 한 번 탭", 46, GRAY, "semibold")]); sc.layer(p, center(w), ease_up(420, 1.3), 1.3)
     scenes.append(sc)
 
     # 4 원탭 휴식 + TTS (A 59.5–68.5, 1배속)
     sc = Scene("s4", 9.0); solid(sc); device(sc, F["A"], 59.5, 68.5, 1, DY, audio=True)
-    p, w, h = text_png("c4a.png", [("시트 · 조명 · 공조", 72, WHITE, True), ("한 번에.", 72, MINT, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
-    p, w, h = text_png("c4b.png", [("차가 직접 말해요", 44, AMBER, False)]); sc.layer(p, center(w), 1660, 0.6)
+    p, w, h = text_png("c4a.png", [("시트, 조명, 공조", 72, WHITE, True), ("한 번에.", 72, MINT, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
+    p, w, h = text_png("c4b.png", [("차가 직접 말해요", 44, AMBER, "semibold")]); sc.layer(p, center(w), 1660, 0.6)
     x = 90
     for k, (t, st) in enumerate([("등받이 절반", 4.2), ("조명 낮춤", 4.7), ("공조 22°C", 5.2)]):
         p, w, h = chip(f"chip{k}.png", t); sc.layer(p, slide_in_right(x, st), 1740, st, 0.25); x += w + 24
@@ -162,40 +180,40 @@ def build():
 
     # 5 예측 (A 130–178, 9.6배속)
     sc = Scene("s5", 5.0); solid(sc); device(sc, F["A"], 130, 178, 9.6, DY)
-    p, w, h = text_png("c5a.png", [("충전 속도로", 64, GRAY, False), ("출발 시 배터리를 예측", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
+    p, w, h = text_png("c5a.png", [("충전 속도로", 56, GRAY, "medium"), ("출발 시 배터리를 예측", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
     p, w, h = text_png("c5b.png", [("약 65%  →  약 75%", 66, AMBER, True)], pad=28, bg=DARK, radius=50); sc.layer(p, center(w), 1700, 2.6, 0.2, pop=True)
     scenes.append(sc)
 
     # 6 선라이즈 (B 0–33, 4.7배속) + 밝기 바
     sc = Scene("s6", 7.0); solid(sc); device(sc, F["B"], 0, 33, 33 / 7.0, DY)
-    p, w, h = text_png("c6a.png", [("깨울 때가 되면,", 64, GRAY, False), ("조명을 천천히 밝혀요", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
+    p, w, h = text_png("c6a.png", [("깨울 때가 되면,", 56, GRAY, "medium"), ("조명을 천천히 밝혀요", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
     track = Image.new("RGBA", (900, 26), (0, 0, 0, 0)); ImageDraw.Draw(track).rounded_rectangle((0, 0, 899, 25), 13, fill=DARK + (255,)); tp = os.path.join(T, "track.png"); track.save(tp)
     fill = Image.new("RGBA", (900, 26), (0, 0, 0, 0)); ImageDraw.Draw(fill).rounded_rectangle((0, 0, 899, 25), 13, fill=AMBER + (255,)); fp = os.path.join(T, "fill.png"); fill.save(fp)
     cover = Image.new("RGBA", (90, 26), tuple(int(BG[i:i+2], 16) for i in (0, 2, 4)) + (255,)); cp = os.path.join(T, "cover.png"); cover.save(cp)
     sc.layer(tp, 90, 1720, 0.8, 0.2); sc.layer(fp, f"90-900+900*min(1,max(0,t-1.0)/5.0)", 1720, 1.0, 0.1); sc.layer(cp, 0, 1720, 0, 0.05)
-    p, w, h = text_png("c6b.png", [("앰비언트 밝기 10% → 80% · 풍량 1 → 2단", 36, GRAY, False)]); sc.layer(p, center(w), 1770, 1.2)
+    p, w, h = text_png("c6b.png", [("밝기 10%에서 80%로, 바람은 한 단계 세게", 38, GRAY, "semibold")]); sc.layer(p, center(w), 1770, 1.2)
     scenes.append(sc)
 
     # 7 깨움 + TTS + 복원 (B 33–47, 1배속)
     sc = Scene("s7", 14.0); solid(sc); device(sc, F["B"], 33, 47, 1, DY, audio=True)
     p, w, h = text_png("c7a.png", [("출발 시각에 깨우고,", 72, WHITE, True), ("원래대로.", 72, MINT, True)]); sc.layer(p, center(w), ease_up(250, 0.3), 0.3)
-    p, w, h = text_png("c7b.png", [("\"출발 시각입니다. 배터리 72%.\"", 42, AMBER, False)]); sc.layer(p, center(w), 1660, 1.2, end=7.5)
-    p, w, h = text_png("c7c.png", [("10초 뒤 시트 · 조명 · 공조 복원", 48, WHITE, True)], pad=26, bg=DARK, radius=48); sc.layer(p, center(w), 1680, 8.0, 0.2, pop=True, end=12.3)
+    p, w, h = text_png("c7b.png", [("\"출발 시각입니다. 배터리 72%.\"", 42, AMBER, "semibold")]); sc.layer(p, center(w), 1660, 1.2, end=7.5)
+    p, w, h = text_png("c7c.png", [("10초 뒤 시트, 조명, 공조 복원", 48, WHITE, True)], pad=26, bg=DARK, radius=48); sc.layer(p, center(w), 1680, 8.0, 0.2, pop=True, end=12.3)
     p, w, h = text_png("c7d.png", [("내리기 전 확인까지", 48, AMBER, True)], pad=26, bg=DARK, radius=48); sc.layer(p, center(w), 1680, 12.6, 0.2, pop=True)
     scenes.append(sc)
 
     # 8 학습 (B 80–93.5, 3배속)
     sc = Scene("s8", 4.5); solid(sc); device(sc, F["B"], 80, 93.5, 3, DY)
-    p, w, h = text_png("c8a.png", [("두 번째부터는", 64, GRAY, False), ("내 차의 속도를 기억", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.2), 0.2)
+    p, w, h = text_png("c8a.png", [("두 번째부터는", 56, GRAY, "medium"), ("내 차의 속도를 기억", 72, WHITE, True)]); sc.layer(p, center(w), ease_up(250, 0.2), 0.2)
     p, w, h = chip("chip8.png", "지난 충전 기준 약 15분", 44); sc.layer(p, center(w), 1700, 2.4, 0.2, pop=True)
     scenes.append(sc)
 
     # 9 엔드카드
     sc = Scene("s9", 5.5); kenburns(sc, VB, dark=0.0, zoom_per_frame=0.0004)
-    p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, False)]); sc.layer(p, center(w), 480, 0.2, 0.25, pop=True)
-    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True), ("휴식은 당신이.", 84, WHITE, True)]); sc.layer(p, center(w), ease_up(1060, 1.0), 1.0)
-    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)]); sc.layer(p, center(w), ease_up(1330, 1.8), 1.8)
-    p, w, h = text_png("e4.png", [("#HMG차량용앱개발공모전 #PleosConnect #전기차충전", 34, MINT, False)]); sc.layer(p, center(w), 1760, 2.6)
+    p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, "semibold")], shadow=True); sc.layer(p, center(w), 480, 0.2, 0.25, pop=True)
+    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True), ("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), ease_up(1060, 1.0), 1.0)
+    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), ease_up(1330, 1.8), 1.8)
+    p, w, h = text_png("e4.png", [("#HMG차량용앱개발공모전 #PleosConnect #전기차충전", 34, MINT, "semibold")]); sc.layer(p, center(w), 1760, 2.6)
     scenes.append(sc)
 
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
