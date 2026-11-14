@@ -6,7 +6,7 @@ ponytail: 외부 모션 툴 없이 ffmpeg 식(overlay/scale eval=frame/fade alph
 구성: 훅(키네틱 텍스트) → 문제 → 해결(기기 프레임 슬라이드 인) → 원탭 휴식(TTS, 칩) → 예측 → 선라이즈(밝기 바) → 깨움(TTS) → 학습 → 엔드카드
 """
 import os, subprocess, sys, tempfile
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BRAND = os.path.join(HERE, "..", "..", "design", "brand")
@@ -144,6 +144,15 @@ def gradient_png(name, top, bottom):
     im = Image.composite(Image.new("RGB", (W, H), bottom), Image.new("RGB", (W, H), top), g)
     p = os.path.join(T, name); im.save(p); return p
 
+def endcard_bg():
+    """남색 그라데이션 + 오른쪽 아래 로고 워터마크(앱 아이콘 전경에서 배경색을 빼내 22% 투명도로). brand/vertical-bg.png의 구도를 따른다."""
+    bg = Image.open(gradient_png("grad.png", (9, 24, 66), (5, 9, 26))).convert("RGBA")
+    ic = Image.open(os.path.join(BRAND, "icon-fg.png")).convert("RGBA")
+    key = Image.new("RGB", ic.size, ic.getpixel((0, 0))[:3])
+    a = ImageChops.difference(ic.convert("RGB"), key).convert("L").point(lambda v: 255 if v > 40 else 0).filter(ImageFilter.GaussianBlur(1))
+    ic.putalpha(a.point(lambda v: v * 22 // 100)); ic = ic.resize((1150, 1150), Image.LANCZOS)
+    bg.alpha_composite(ic, (90, 860)); p = os.path.join(T, "endbg.png"); bg.convert("RGB").save(p); return p
+
 def ring_seq(name, r, stroke, color, n=36):
     """링이 12시에서 시계방향으로 그려지는 n프레임 시퀀스(이징). 밑에 넓은 글로우."""
     d = os.path.join(T, name); os.makedirs(d, exist_ok=True); S = (r + 60) * 2; c = S // 2
@@ -229,7 +238,7 @@ def build():
     scenes.append(sc); trans.append("fade")
 
     # 5 예측 (A 130–178, 9.6배속): 숫자가 65→75로 올라가는 카운터
-    sc = Scene("s5", 5.0); backdrop(sc); device(sc, F["A"], 130, 178, 9.6, DY)
+    sc = Scene("s5", 4.6); backdrop(sc); device(sc, F["A"], 130, 178, 9.6, DY)
     header(sc, "03", "배터리 예측", [("충전 속도로", 56, GRAY, "medium"), ("출발 시 배터리를 예측", 72, WHITE, True)])
     t0, step = 2.4, 0.13
     for k, v in enumerate(range(65, 76)):
@@ -256,20 +265,20 @@ def build():
 
     # 8 학습 (B 80–93.5, 3배속)
     # 두 번째 설정 → "휴식 모드 시작" 탭 → 두 번째 휴식이 시작되는 데까지 보여 주고 끝낸다 (B 100초쯤 탭)
-    sc = Scene("s8", 7.6); backdrop(sc); device(sc, F["B"], 80, 102.8, 3, DY)
+    sc = Scene("s8", 10.0); backdrop(sc); device(sc, F["B"], 80, 105, 2.5, DY)
     header(sc, "06", "학습", [("두 번째부터는", 56, GRAY, "medium"), ("내 차의 속도를 기억", 72, WHITE, True)], 0.2)
-    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up", end=5.6)
-    p, w, h = text_png("c8c.png", [("이번에도 한 번 탭이면 끝.", 48, WHITE, True)]); sc.layer(p, center(w), 1540, 6.0, "up")
+    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up", end=6.8)
+    p, w, h = text_png("c8c.png", [("이번에도 한 번 탭이면 끝.", 48, WHITE, True)]); sc.layer(p, center(w), 1540, 7.4, "up")
     scenes.append(sc); trans.append("fade")
 
     # 9 엔드카드: 링이 그려지고 → 링 중앙에 이름 팝 → 슬로건 두 줄 계단식 → 해시태그
-    sc = Scene("s9", 6.0); still(sc, gradient_png("grad.png", (9, 24, 66), (5, 9, 26)))
+    sc = Scene("s9", 4.6); still(sc, endcard_bg())
     CX, CY, R = 540, 600, 400
     rp, rs = ring_seq("ring", R, 14, MINT); sc.layer(rp, CX - rs // 2, CY - rs // 2, 0.2, seq=True)
     p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, "semibold")], shadow=True); sc.layer(p, center(w), f"{CY}-h/2", 1.1, "pop")
-    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1140, 1.7, "up")
-    p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1250, 1.95, "up")
-    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.6, "pop")
+    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1140, 1.5, "up")
+    p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1250, 1.75, "up")
+    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.3, "pop")
     scenes.append(sc)
 
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
