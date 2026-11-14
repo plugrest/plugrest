@@ -2,7 +2,7 @@
 """숏폼 v2 (1080x1920, 약 55초) — Pleos 실녹화본(raw_pleos_A/B.webm)으로 스토리텔링 + 모션.
 실행: /usr/bin/python3 build_shortform_v2.py  (ffmpeg, Pillow 필요. 시스템 python3에 Pillow 있음)
 ponytail: 외부 모션 툴 없이 ffmpeg 식(overlay/scale eval=frame/fade alpha/zoompan/xfade)만 쓴다.
-         배경음은 ffmpeg aevalsrc로 만든 드론 패드. TTS 구간은 sidechaincompress로 덕킹.
+         배경음은 make_bgm.py가 합성한 음악상자풍 아르페지오. TTS 구간은 sidechaincompress로 덕킹.
 구성: 훅(키네틱 텍스트) → 문제 → 해결(기기 프레임 슬라이드 인) → 원탭 휴식(TTS, 칩) → 예측 → 선라이즈(밝기 바) → 깨움(TTS) → 학습 → 엔드카드
 """
 import os, subprocess, sys, tempfile
@@ -20,9 +20,10 @@ ENC = ["-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420
 
 def run(args):
     """120초 넘으면 죽이고 최대 3회 재시도(안전망)."""
-    if os.environ.get("DEBUG"): print("ffmpeg", " ".join(args), flush=True)
-    # ponytail: ffmpeg 9.0.2는 -v error 로 돌리면 같은 그래프가 재현 가능하게 멈춘다(-v info 는 0.7초에 끝남). 원인 불명, info+nostats 로 우회.
-    cmd = ["ffmpeg", "-nostdin", "-v", "info", "-nostats", "-y", "-filter_threads", "1", "-filter_complex_threads", "1", *args]
+    if os.environ.get("DEBUG"): import json; open(os.environ["DEBUG"], "a").write(json.dumps(args) + "\n")
+    # 멈춤 원인(스레드 스택으로 확인): 별도 -f lavfi 입력(anullsrc/color)의 디먹서 스레드가 큐 전송에서 막히고 필터 스레드는 수신 대기 → 스케줄러 교착.
+    # 소스를 필터그래프 안으로 옮긴 뒤 32/32 통과. 타임아웃+재시도는 안전망으로만 남긴다.
+    cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-filter_threads", "1", "-filter_complex_threads", "1", *args]
     for attempt in range(3):
         try:
             r = subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=float(os.environ.get("FFTIMEOUT", "120")))
@@ -102,10 +103,15 @@ class Scene:
     def add_input(self, args):
         self.inputs += args; self.n += 1; return self.n - 1
     def base(self, label): self.last = label
-    def layer(self, png, x, y, start=0.0, anim="fade", end=None, enable=None, fade=0.25, grow=None):
-        """x,y: 숫자(또는 식). anim: fade | up | pop | right. end: 사라지는 시각. enable: 보이는 조건식. grow: 폭이 0→100%로 자라는 선."""
-        i = self.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(self.dur + 1), "-i", png])  # 무한 소스 금지(필터 교착 방지)
-        f = f"[{i}:v]format=rgba,fade=t=in:st={start}:d={fade}:alpha=1"
+    def layer(self, png, x, y, start=0.0, anim="fade", end=None, enable=None, fade=0.25, grow=None, seq=False):
+        """x,y: 숫자(또는 식). anim: fade | up | pop | right. end: 사라지는 시각. enable: 보이는 조건식. grow: 폭이 0→100%로 자라는 선.
+        seq=True: png는 프레임 시퀀스 패턴(%02d). start까지 투명으로 기다렸다가 재생하고 마지막 프레임을 유지."""
+        if seq:
+            i = self.add_input(["-framerate", str(FPS), "-i", png])
+            f = f"[{i}:v]format=rgba,tpad=start_duration={start}:start_mode=add:color=0x00000000:stop_mode=clone:stop_duration={self.dur + 1}"
+        else:
+            i = self.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(self.dur + 1), "-i", png])  # 무한 소스 금지(필터 교착 방지)
+            f = f"[{i}:v]format=rgba,fade=t=in:st={start}:d={fade}:alpha=1"
         if end is not None: f += f",fade=t=out:st={end}:d=0.3:alpha=1"
         if anim == "pop": f += f",scale=w='iw*{s_pop(start)}':h=-1:eval=frame"
         if grow: f += f",scale=w='max(2,iw*{E(start, grow)})':h=ih:eval=frame"
@@ -115,16 +121,34 @@ class Scene:
         en = f":enable='{enable}'" if enable else ""
         self.fc.append(f"[{self.last}][l{i}]overlay=x='{x}':y='{y}':eval=frame{en}[v{i}]"); self.last = f"v{i}"
     def render(self):
-        out = os.path.join(T, f"{self.name}.mp4")
+        out = os.path.join(T, f"{self.name}.mp4"); print("render", self.name, file=sys.stderr, flush=True)
         if self.audio: afc = f"{self.audio},apad,atrim=0:{self.dur}[a]"
-        else:
-            self.add_input(["-f", "lavfi", "-t", str(self.dur + 1), "-i", "anullsrc=r=48000:cl=stereo"]); afc = f"[{self.n-1}:a]atrim=0:{self.dur}[a]"
+        else: afc = f"anullsrc=r=48000:cl=stereo,atrim=0:{self.dur}[a]"  # 그래프 안 소스(별도 lavfi 입력은 스케줄러 교착을 일으킴)
         fc = ";".join(self.fc + [afc, f"[{self.last}]fps={FPS},format=yuv420p[vo]"])
         run([*self.inputs, "-filter_complex", fc, "-map", "[vo]", "-map", "[a]", "-t", str(self.dur), *ENC, out])
         return out
 
 def solid(sc):
-    i = sc.add_input(["-f", "lavfi", "-i", f"color=c=0x{BG}:s={W}x{H}:r={FPS}:d={sc.dur + 1}"]); sc.base(f"{i}:v")
+    sc.fc.append(f"color=c=0x{BG}:s={W}x{H}:r={FPS}:d={sc.dur + 1}[bg]"); sc.base("bg")
+
+def still(sc, img):
+    i = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", img]); sc.base(f"{i}:v")
+
+def gradient_png(name, top, bottom):
+    g = Image.linear_gradient("L").resize((W, H))
+    im = Image.composite(Image.new("RGB", (W, H), bottom), Image.new("RGB", (W, H), top), g)
+    p = os.path.join(T, name); im.save(p); return p
+
+def ring_seq(name, r, stroke, color, n=36):
+    """링이 12시에서 시계방향으로 그려지는 n프레임 시퀀스(이징). 밑에 넓은 글로우."""
+    d = os.path.join(T, name); os.makedirs(d, exist_ok=True); S = (r + 60) * 2; c = S // 2
+    for k in range(n):
+        u = (k + 1) / n; e = 1 - (1 - u) ** 3; box = (c - r, c - r, c + r, c + r)
+        glow = Image.new("RGBA", (S, S), (0, 0, 0, 0)); ImageDraw.Draw(glow).arc(box, -90, -90 + 360 * e, fill=color + (110,), width=stroke * 3)
+        im = glow.filter(ImageFilter.GaussianBlur(stroke * 1.4))
+        ImageDraw.Draw(im).arc(box, -90, -90 + 360 * e, fill=color + (255,), width=stroke)
+        im.save(os.path.join(d, f"{k:02d}.png"))
+    return os.path.join(d, "%02d.png"), S
 
 def kenburns(sc, img, dark=0.5, zoom_per_frame=0.0006, pan=(0, 0)):
     """느린 줌 + 팬(pan: 프레임당 px). 사진 위 글자 가독성용 어둡기(dark)."""
@@ -156,7 +180,6 @@ def glow_png(name, r, color):
 def build():
     global ASSETS
     ASSETS = device_assets(); F = prep_footage(); scenes = []; trans = []
-    VB = os.path.join(BRAND, "vertical-bg.png")
     NR, NW = os.path.join(BRAND, "night-rest.png"), os.path.join(BRAND, "night-waiting.png")  # 생성 이미지(밤 휴게소 충전 / 차 안에서 폰 알람)
     DY = 620  # 기기 프레임 y (965 높이 → 1585)
     line = rect_png("line.png", 520, 8, MINT)
@@ -187,9 +210,10 @@ def build():
     sc = Scene("s4", 9.0); solid(sc); device(sc, F["A"], 59.5, 68.5, 1, DY, audio=True)
     p, w, h = text_png("c4a.png", [("시트, 조명, 공조", 72, WHITE, True), ("한 번에.", 72, MINT, True)]); sc.layer(p, center(w), 250, 0.3, "up")
     p, w, h = text_png("c4b.png", [("차가 직접 말해요", 44, AMBER, "semibold")]); sc.layer(p, center(w), 1660, 0.6, "up")
-    x = 90
-    for k, (t, st) in enumerate([("등받이 절반", 4.2), ("조명 낮춤", 4.6), ("공조 22°C", 5.0)]):
-        p, w, h = chip(f"chip{k}.png", t); sc.layer(p, x, 1740, st, "right", fade=0.15); x += w + 24
+    chips = [chip(f"chip{k}.png", t) for k, t in enumerate(["등받이 절반", "조명 낮춤", "공조 22°C"])]
+    x = (W - sum(w for _, w, _ in chips) - 24 * 2) // 2  # 세 칩을 한 줄로 가로 가운데
+    for (p, w, h), st in zip(chips, (4.2, 4.6, 5.0)):
+        sc.layer(p, f"{x}+({w}-w)/2", f"1740+({h}-h)/2", st, "pop", fade=0.15); x += w + 24
     scenes.append(sc); trans.append("fade")
 
     # 5 예측 (A 130–178, 9.6배속): 숫자가 65→75로 올라가는 카운터
@@ -227,13 +251,15 @@ def build():
     p, w, h = chip("chip8.png", "지난 충전 기준 약 15분", 44); sc.layer(p, center(w), 1700, 2.4, "pop")
     scenes.append(sc); trans.append("circleopen")
 
-    # 9 엔드카드: 로고 팝 → 슬로건 두 줄 계단식 → 해시태그
-    sc = Scene("s9", 5.5); kenburns(sc, VB, dark=0.0, zoom_per_frame=0.0005)
-    p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, "semibold")], shadow=True); sc.layer(p, center(w), 480, 0.2, "pop")
-    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1060, 1.0, "up")
-    p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1170, 1.25, "up")
-    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1330, 1.9, "pop")
-    p, w, h = text_png("e4.png", [("#HMG차량용앱개발공모전 #PleosConnect #전기차충전", 34, MINT, "semibold")]); sc.layer(p, center(w), 1760, 2.8, "up")
+    # 9 엔드카드: 링이 그려지고 → 링 중앙에 이름 팝 → 슬로건 두 줄 계단식 → 해시태그
+    sc = Scene("s9", 6.0); still(sc, gradient_png("grad.png", (9, 24, 66), (5, 9, 26)))
+    CX, CY, R = 540, 600, 400
+    rp, rs = ring_seq("ring", R, 14, MINT); sc.layer(rp, CX - rs // 2, CY - rs // 2, 0.2, seq=True)
+    p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, "semibold")], shadow=True); sc.layer(p, center(w), f"{CY}-h/2", 1.1, "pop")
+    p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1140, 1.7, "up")
+    p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1250, 1.95, "up")
+    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.6, "pop")
+    p, w, h = text_png("e4.png", [("#HMG차량용앱개발공모전 #PleosConnect #전기차충전", 34, MINT, "semibold")]); sc.layer(p, center(w), 1760, 3.3, "up")
     scenes.append(sc)
 
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
