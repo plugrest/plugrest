@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pleos Connect 에뮬레이터 실녹화(raw_pleos_A.webm / raw_pleos_B.webm, 소리 포함)에서
-# 시연 영상 demo_pleos_v1.mp4(1920x1080)와 숏폼 shortform_pleos_v1.mp4(1080x1920, 45초 안팎)를 만든다.
+# 시연 영상 demo_pleos_v1.mp4(1920x1080)를 만든다. 숏폼은 build_shortform_v2.py.
 # 필요: ffmpeg, swift(macOS 기본). 사용: N_END=<출발 시각 도달 때 배터리 %> ./build_video_pleos.sh
 # ponytail: 자막은 render_text.swift가 PNG로 만들어 hstack/vstack으로 붙인다. 배속 구간은 소리를 뺀다(TTS 구간은 모두 1배속).
 set -euo pipefail
@@ -23,17 +23,6 @@ d3.png|640|1080|$BG|left|b26,$M,STEP 3 · 출발 시 배터리|b48,$W,충전 속
 d4.png|640|1080|$BG|left|b26,$M,STEP 4 · 선라이즈 기상|b48,$W,조명을 천천히\n밝혀 깨웁니다|28,$G,출발 전부터 앰비언트 밝기를\n조금씩 올리고 풍량을 한 단계 올립니다.\n알람 대신 해가 뜨듯이.|24,$A,$FOOT (3배속)
 d5.png|640|1080|$BG|left|b26,$M,STEP 5 · 출발 시각|b48,$W,시각이 되면 깨우고\n전부 원래대로|28,$G,10초 카운트다운 뒤 시트·조명·공조를\n복원하고, 내리기 전 확인할 것을\n알려 줍니다.|26,$A,"출발 시각입니다. 배터리 ${N_END}%.\n10초 후 시트를 원래대로 되돌립니다."|24,$A,$FOOT
 d6.png|640|1080|$BG|left|b26,$M,STEP 6 · 학습|b48,$W,두 번째부터는\n내 차의 속도를 기억|28,$G,설정 화면에 바로\n'지난 충전 기준 약 ${N_LEARN}분'.\n시작 음성에도 예상 시간이 붙습니다.|24,$A,$FOOT
-s_hook.png|1080|1920|000000|center|b120,$W,알람\n맞추지 마세요.|b96,$M,출발 시각엔\n차가 깨워요.
-s_ring.png|760|760|none|center|b130,$W,충전쉼표|44,$M,Plug & Rest
-s_slogan.png|1080|460|none|center|b80,$W,충전은 차가,\n휴식은 당신이.|b48,$A,차가 알람이 됩니다.|40,$G,Pleos Connect 앱
-s_tags.png|1080|120|none|center|34,$M,#HMG차량용앱개발공모전 #PleosConnect #전기차충전
-s_bot.png|1080|300|$BG|center|28,$G,$FOOT
-s2.png|1080|300|$BG|center|b60,$M,출발 시각 고르고, 원탭.
-s3.png|1080|300|$BG|center|b52,$W,시트 젖히고 · 조명 낮추고 · 공조 22°C|34,$A,"출발까지 10분, 편히 쉬세요."
-s4.png|1080|300|$BG|center|b52,$W,충전 속도로 '출발 시 배터리' 예측
-s5.png|1080|300|$BG|center|b52,$W,깨울 때가 되면, 조명을 천천히
-s6.png|1080|300|$BG|center|b52,$W,출발 시각에 깨워주고, 원래대로|34,$A,"출발 시각입니다. 배터리 ${N_END}%."
-s7.png|1080|300|$BG|center|b52,$W,다음 충전부터는 바로 예측|34,$A,지난 충전 기준 약 ${N_LEARN}분
 SPEC
 swift render_text.swift "$T/spec.txt" "$T"
 
@@ -85,17 +74,8 @@ seg B $B_S2_S    $B_S2_E    1 d6.png "$T/a8.mp4" demo   # 2회째 시작 TTS(예
 card end.png 6 "$T/a9.mp4"
 join demo_pleos_v1.mp4 "$T"/a{0..9}.mp4
 
-# ---------- 5) 숏폼 ----------
-card s_hook.png 2 "$T/b1.mp4"
-seg A $A_WIZ2_S  $A_WIZ2_E  2 s2.png "$T/b2.mp4" short
-seg A $A_START_S $A_START_SE 1 s3.png "$T/b3.mp4" short
-seg A $A_CALC_S  $A_CALC_E  8 s4.png "$T/b4.mp4" short
-seg B $B_SUN_S   $B_SUN_E   4 s5.png "$T/b5.mp4" short
-seg B $B_WAKE_S  $B_WAKE_SE 1 s6.png "$T/b6.mp4" short
-seg B $B_LEARN_S $B_LEARN_E 4 s7.png "$T/b7.mp4" short
-bgcard "$BRAND/vertical-bg.png" 4 "$T/b8.mp4" "[0:v]scale=1080:1920[b];[b][1:v]overlay=160:171[c];[c][2:v]overlay=0:1020[d];[d][3:v]overlay=0:1770" s_ring.png s_slogan.png s_tags.png
-join shortform_pleos_v1.mp4 "$T"/b{1..8}.mp4
+# 숏폼은 build_shortform_v2.py(스토리텔링·모션 버전)가 만든다.
 
-for f in demo_pleos_v1.mp4 shortform_pleos_v1.mp4; do
+for f in demo_pleos_v1.mp4; do
   printf '%s  ' "$f"; ffprobe -v error -select_streams v -show_entries stream=width,height:format=duration -of csv=p=0 "$f" | tr '\n' ' '; echo
 done
