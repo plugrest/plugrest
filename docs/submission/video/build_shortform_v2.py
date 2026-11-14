@@ -14,7 +14,6 @@ OUT = os.path.join(HERE, "shortform_pleos_v2.mp4")
 W, H, FPS, XF = 1080, 1920, 30, 0.4
 BG = "0E0F12"
 MINT, AMBER, WHITE, GRAY, DARK = (67, 224, 160), (255, 199, 90), (245, 245, 245), (170, 176, 182), (28, 31, 38)
-CHIP, CHIP_LINE = (38, 42, 52), (76, 82, 96)
 FONT = "/System/Library/Fonts/AppleSDGothicNeo.ttc"
 T = tempfile.mkdtemp(prefix="sf2_")
 ENC = ["-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-r", str(FPS), "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
@@ -64,8 +63,6 @@ def text_png(name, items, align="center", pad=24, bg=None, radius=0, shadow=Fals
     paint(im, lambda c: c + (255,))
     p = os.path.join(T, name); im.save(p); return p, w, h
 
-def chip(name, text, size=40):
-    return text_png(name, [(text, size, WHITE, True)], pad=22, bg=CHIP, radius=40, border=CHIP_LINE)
 
 def device_assets():
     dw, dh = 900, 965  # 앱 영역 1100x1180(상태바·내비바 제외) → 900 폭
@@ -75,19 +72,10 @@ def device_assets():
     M = 90; im = Image.new("RGBA", (dw + 2 * M, dh + 2 * M), (0, 0, 0, 0))
     sh = Image.new("RGBA", im.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).rounded_rectangle((M, M + 30, M + dw, M + dh + 30), 36, fill=(0, 0, 0, 200))
     im = Image.alpha_composite(im, sh.filter(ImageFilter.GaussianBlur(36)))
-    ImageDraw.Draw(im).rounded_rectangle((M - 2, M - 2, M + dw + 1, M + dh + 1), 38, outline=(255, 255, 255, 64), width=2)
     cp = os.path.join(T, "card.png"); im.save(cp)
     return mp, (cp, M), dw, dh
 
-def wordmark_png():
-    f = font(32, "semibold"); tw = int(f.getlength("충전쉼표")); im = Image.new("RGBA", (tw + 52, 46), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-    d.ellipse((2, 9, 30, 37), outline=MINT + (255,), width=4); d.text((44, 2), "충전쉼표", font=f, fill=WHITE + (225,))
-    p = os.path.join(T, "wordmark.png"); im.save(p); return p
 
-def bars_png(name, color):
-    hs = [16, 30, 46, 30, 16]; im = Image.new("RGBA", (len(hs) * 14 - 6, 46), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-    for k, h in enumerate(hs): d.rounded_rectangle((k * 14, 23 - h // 2, k * 14 + 8, 23 + h // 2), 4, fill=color + (255,))
-    p = os.path.join(T, name); im.save(p); return p, im.size[0]
 
 def prep_footage():
     """에뮬레이터 webm → 앱 영역(오른쪽 1707px) 30fps mp4 (캐시: 같은 폴더 .cache)"""
@@ -167,15 +155,12 @@ def ring_seq(name, r, stroke, color, n=36):
         im.save(os.path.join(d, f"{k:02d}.png"))
     return os.path.join(d, "%02d.png"), S
 
-def backdrop(sc, tint=MINT):
-    """기기 장면 배경: 남색→검정 그라데이션 + 기기 뒤 큰 색 글로우(깊이감) + 좌상단 워드마크"""
+def backdrop(sc, tint=None):
+    """기기 장면 배경: 남색→검정 그라데이션"""
     still(sc, gradient_png("bg.png", (13, 20, 40), (8, 9, 14)))
-    gp, gs = glow_png(f"bgglow{tint[0]}.png", 400, tint, alpha=96); sc.layer(gp, (W - gs) // 2, DY + 480 - gs // 2, 0, fade=0.01)
-    sc.layer(WM, 64, 62, 0, fade=0.2)
 
 def header(sc, step, label, lines, start=0.3, anim="up", y=225):
-    """단계 필(01 출발 시각) + 헤드라인 블록. 블록 높이를 돌려준다."""
-    p, w, h = text_png(f"pill{step}.png", [(f"{step}  {label}", 30, MINT, "semibold")], pad=18, bg=(16, 36, 32), radius=40, border=(38, 96, 78)); sc.layer(p, center(w), 128, 0.15, "pop")
+    """헤드라인 블록(장식 없음). step/label은 장면 이름표로만 쓴다."""
     p, w, h = text_png(f"hl{step}.png", lines); sc.layer(p, center(w), y, start, anim); return h
 
 def kenburns(sc, img, dark=0.5, zoom_per_frame=0.0006, pan=(0, 0)):
@@ -208,8 +193,8 @@ def glow_png(name, r, color, alpha=255):
 
 # ---------- 장면 ----------
 def build():
-    global ASSETS, WM, DY
-    ASSETS = device_assets(); WM = wordmark_png(); F = prep_footage(); scenes = []; trans = []
+    global ASSETS, DY
+    ASSETS = device_assets(); F = prep_footage(); scenes = []; trans = []
     NR, NW = os.path.join(BRAND, "night-rest.png"), os.path.join(BRAND, "night-waiting.png")  # 생성 이미지(밤 휴게소 충전 / 차 안에서 폰 알람)
     DY = 480  # 기기 프레임 y (965 높이 → 1445). 아래 300px는 쇼츠 UI가 가리므로 비워 둔다
     line = rect_png("line.png", 520, 8, MINT)
@@ -239,12 +224,8 @@ def build():
     # 4 원탭 휴식 + TTS (A 59.5–68.5, 1배속), 칩 3개가 오른쪽에서 차례로
     sc = Scene("s4", 9.0); backdrop(sc); device(sc, F["A"], 59.5, 68.5, 1, DY, audio=True)
     header(sc, "02", "원탭 휴식", [("시트, 조명, 공조", 72, WHITE, True), ("한 번에.", 72, MINT, True)])
-    bp, bw = bars_png("bars.png", AMBER); p, w, h = text_png("c4b.png", [("차가 직접 말해요", 44, AMBER, "semibold")])
-    x0 = (W - bw - 14 - w) // 2; sc.layer(bp, x0, 1500 + (h - 46) // 2, 0.6, "up"); sc.layer(p, x0 + bw + 14, 1500, 0.6, "up")
-    chips = [chip(f"chip{k}.png", t) for k, t in enumerate(["등받이 절반", "조명 낮춤", "공조 22°C"])]
-    x = (W - sum(w for _, w, _ in chips) - 24 * 2) // 2  # 세 칩을 한 줄로 가로 가운데
-    for (p, w, h), st in zip(chips, (4.2, 4.6, 5.0)):
-        sc.layer(p, f"{x}+({w}-w)/2", f"1590+({h}-h)/2", st, "pop", fade=0.15); x += w + 24
+    p, w, h = text_png("c4b.png", [("차가 직접 말해요", 48, AMBER, True)]); sc.layer(p, center(w), 1500, 0.6, "up")
+    p, w, h = text_png("c4c.png", [("등받이 절반, 조명 낮춤, 공조 22°C", 40, GRAY, "medium")]); sc.layer(p, center(w), 1580, 4.2, "up")
     scenes.append(sc); trans.append("fade")
 
     # 5 예측 (A 130–178, 9.6배속): 숫자가 65→75로 올라가는 카운터
@@ -252,7 +233,7 @@ def build():
     header(sc, "03", "배터리 예측", [("충전 속도로", 56, GRAY, "medium"), ("출발 시 배터리를 예측", 72, WHITE, True)])
     t0, step = 2.4, 0.13
     for k, v in enumerate(range(65, 76)):
-        p, w, h = text_png(f"cnt{v}.png", [(f"출발 시 약 {v}%", 60, AMBER, True)], pad=28, bg=CHIP, radius=50, border=CHIP_LINE)
+        p, w, h = text_png(f"cnt{v}.png", [(f"출발 시 약 {v}%", 64, AMBER, True)])
         en = f"gte(t,{t0 + k * step:.2f})" if v == 75 else f"between(t,{t0 + k * step:.2f},{t0 + (k + 1) * step:.2f})"
         sc.layer(p, center(w), 1540, t0 if k == 0 else 0, "pop" if k == 0 else "fade", enable=en, fade=0.01)
     scenes.append(sc); trans.append("smoothleft")
@@ -261,25 +242,22 @@ def build():
     sc = Scene("s6", 7.0); backdrop(sc, AMBER); device(sc, F["B"], 0, 33, 33 / 7.0, DY)
     header(sc, "04", "선라이즈", [("깨울 때가 되면,", 56, GRAY, "medium"), ("조명을 천천히 밝혀요", 72, WHITE, True)])
     tp = rect_png("track.png", 900, 26, DARK); fp = rect_png("fill.png", 900, 26, AMBER)
-    prog = E(1.0, 5.0)  # 바 폭(grow)과 같은 이징
     sc.layer(tp, 90, 1530, 0.8); sc.layer(fp, 90, 1530, 1.0, fade=0.05, grow=5.0)
-    gp, gs = glow_png("glow.png", 22, AMBER); sc.layer(gp, f"90+900*{prog}-{gs // 2}", 1530 + 13 - gs // 2, 1.0, fade=0.3)
     p, w, h = text_png("c6b.png", [("밝기 10%에서 80%로, 바람은 한 단계 세게", 38, GRAY, "semibold")]); sc.layer(p, center(w), 1590, 1.2, "up")
     scenes.append(sc); trans.append("fade")
 
     # 7 깨움 + TTS + 복원 (B 33–47, 1배속)
     sc = Scene("s7", 14.0); backdrop(sc); device(sc, F["B"], 33, 47, 1, DY, audio=True)
     header(sc, "05", "깨움과 복원", [("출발 시각에 깨우고,", 72, WHITE, True), ("원래대로.", 72, MINT, True)])
-    bp, bw = bars_png("bars7.png", AMBER); p, w, h = text_png("c7b.png", [("\"출발 시각입니다. 배터리 72%.\"", 42, AMBER, "semibold")])
-    x0 = (W - bw - 14 - w) // 2; sc.layer(bp, x0, 1520 + (h - 46) // 2, 1.2, "up", end=7.5); sc.layer(p, x0 + bw + 14, 1520, 1.2, "up", end=7.5)
-    p, w, h = text_png("c7c.png", [("10초 뒤 시트, 조명, 공조 복원", 48, WHITE, True)], pad=26, bg=CHIP, radius=48, border=CHIP_LINE); sc.layer(p, center(w), 1520, 8.0, "pop", end=12.3)
-    p, w, h = text_png("c7d.png", [("내리기 전 확인까지", 48, AMBER, True)], pad=26, bg=CHIP, radius=48, border=CHIP_LINE); sc.layer(p, center(w), 1520, 12.6, "pop")
+    p, w, h = text_png("c7b.png", [("\"출발 시각입니다. 배터리 72%.\"", 46, AMBER, True)]); sc.layer(p, center(w), 1520, 1.2, "up", end=7.5)
+    p, w, h = text_png("c7c.png", [("10초 뒤 시트, 조명, 공조 복원", 50, WHITE, True)]); sc.layer(p, center(w), 1520, 8.0, "up", end=12.3)
+    p, w, h = text_png("c7d.png", [("내리기 전 확인까지", 50, AMBER, True)]); sc.layer(p, center(w), 1520, 12.6, "up")
     scenes.append(sc); trans.append("smoothup")
 
     # 8 학습 (B 80–93.5, 3배속)
     sc = Scene("s8", 4.5); backdrop(sc); device(sc, F["B"], 80, 93.5, 3, DY)
     header(sc, "06", "학습", [("두 번째부터는", 56, GRAY, "medium"), ("내 차의 속도를 기억", 72, WHITE, True)], 0.2)
-    p, w, h = chip("chip8.png", "지난 충전 기준 약 15분", 44); sc.layer(p, center(w), 1540, 2.4, "pop")
+    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up")
     scenes.append(sc); trans.append("circleopen")
 
     # 9 엔드카드: 링이 그려지고 → 링 중앙에 이름 팝 → 슬로건 두 줄 계단식 → 해시태그
@@ -290,7 +268,6 @@ def build():
     p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1140, 1.7, "up")
     p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1250, 1.95, "up")
     p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.6, "pop")
-    p, w, h = text_png("e4.png", [("#HMG차량용앱개발공모전 #PleosConnect #전기차충전", 34, MINT, "semibold")]); sc.layer(p, center(w), 1640, 3.3, "up")
     scenes.append(sc)
 
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
