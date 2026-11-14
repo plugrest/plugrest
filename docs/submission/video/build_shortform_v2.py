@@ -200,7 +200,7 @@ def build():
     line = rect_png("line.png", 520, 8, MINT)
 
     # 1 훅: 키네틱 텍스트 (팝 오버슈트 → 민트 밑줄이 자라남)
-    sc = Scene("s1", 3.8); kenburns(sc, NR, dark=0.35, zoom_per_frame=0.0012, pan=(0.6, 0))
+    sc = Scene("s1", 3.6); kenburns(sc, NR, dark=0.35, zoom_per_frame=0.0012, pan=(0.6, 0))
     p, w, h = text_png("h1.png", [("알람", 170, WHITE, True)], shadow=True); sc.layer(p, center(w), 620, 0.1, "pop")
     p, w, h = text_png("h2.png", [("맞추지 마세요.", 120, WHITE, True)], shadow=True); sc.layer(p, center(w), 830, 0.55, "pop")
     p, w, h = text_png("h3.png", [("출발 시각엔 차가 깨워요.", 76, MINT, True)], shadow=True); sc.layer(p, center(w), 1060, 1.7, "up")
@@ -208,7 +208,7 @@ def build():
     scenes.append(sc); trans.append("fadeblack")
 
     # 2 문제: 줄마다 올라오며 등장, 마지막 줄 팝
-    sc = Scene("s2", 4.4); kenburns(sc, NW, dark=0.42, pan=(0, -0.5))
+    sc = Scene("s2", 4.1); kenburns(sc, NW, dark=0.42, pan=(0, -0.5))
     p, w, h = text_png("p1.png", [("충전하는 동안,", 80, WHITE, True)], shadow=True); sc.layer(p, center(w), 640, 0.2, "up")
     p, w, h = text_png("p2.png", [("시트는 손으로 젖히고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), 790, 1.0, "up")
     p, w, h = text_png("p3.png", [("알람은 폰으로 맞추고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), 880, 1.7, "up")
@@ -216,7 +216,7 @@ def build():
     scenes.append(sc); trans.append("slideup")
 
     # 3 해결: 기기 프레임이 튀어오르듯 등장 (A 47–59.5, 2배속)
-    sc = Scene("s3", 6.3); backdrop(sc); device(sc, F["A"], 47, 59.5, 2, DY, rise=True)
+    sc = Scene("s3", 6.0); backdrop(sc); device(sc, F["A"], 47, 59.5, 2.1, DY, rise=True)
     header(sc, "01", "출발 시각", [("출발 시각만 고르세요", 78, MINT, True)], 0.7, "pop")
     p, w, h = text_png("c3b.png", [("10분 후, 한 번 탭", 46, GRAY, "semibold")]); sc.layer(p, center(w), 350, 1.3, "up")
     scenes.append(sc); trans.append("smoothup")
@@ -247,7 +247,7 @@ def build():
     scenes.append(sc); trans.append("fade")
 
     # 7 깨움 + TTS + 복원 (B 33–47, 1배속)
-    sc = Scene("s7", 14.0); backdrop(sc); device(sc, F["B"], 33, 47, 1, DY, audio=True)
+    sc = Scene("s7", 13.6); backdrop(sc); device(sc, F["B"], 33, 47, 1, DY, audio=True)
     header(sc, "05", "깨움과 복원", [("출발 시각에 깨우고,", 72, WHITE, True), ("원래대로.", 72, MINT, True)])
     p, w, h = text_png("c7b.png", [("\"출발 시각입니다. 배터리 72%.\"", 46, AMBER, True)]); sc.layer(p, center(w), 1520, 1.2, "up", end=7.5)
     p, w, h = text_png("c7c.png", [("10초 뒤 시트, 조명, 공조 복원", 50, WHITE, True)]); sc.layer(p, center(w), 1520, 8.0, "up", end=12.3)
@@ -255,10 +255,12 @@ def build():
     scenes.append(sc); trans.append("smoothup")
 
     # 8 학습 (B 80–93.5, 3배속)
-    sc = Scene("s8", 4.5); backdrop(sc); device(sc, F["B"], 80, 93.5, 3, DY)
+    # 두 번째 설정 → "휴식 모드 시작" 탭 → 두 번째 휴식이 시작되는 데까지 보여 주고 끝낸다 (B 100초쯤 탭)
+    sc = Scene("s8", 7.6); backdrop(sc); device(sc, F["B"], 80, 102.8, 3, DY)
     header(sc, "06", "학습", [("두 번째부터는", 56, GRAY, "medium"), ("내 차의 속도를 기억", 72, WHITE, True)], 0.2)
-    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up")
-    scenes.append(sc); trans.append("circleopen")
+    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up", end=5.6)
+    p, w, h = text_png("c8c.png", [("이번에도 한 번 탭이면 끝.", 48, WHITE, True)]); sc.layer(p, center(w), 1540, 6.0, "up")
+    scenes.append(sc); trans.append("fade")
 
     # 9 엔드카드: 링이 그려지고 → 링 중앙에 이름 팝 → 슬로건 두 줄 계단식 → 해시태그
     sc = Scene("s9", 6.0); still(sc, gradient_png("grad.png", (9, 24, 66), (5, 9, 26)))
