@@ -95,7 +95,7 @@ cd plugrest/app                    # app/ 폴더가 Gradle 루트(단일 모듈)
 ## 시연 영상
 
 - `docs/submission/video/demo_pleos_v1.mp4` — Pleos Connect 에뮬레이터 v2.1 실녹화, 약 2분, 앱 TTS 음성 포함. 출발 시각 모드 전체 흐름(설정 → 휴식 → 선라이즈 → 깨움·복원 → 하차 체크)과 두 번째 세션의 학습값(지난 충전 기준 약 15분)까지.
-- `docs/submission/video/shortform_pleos_v2.mp4` — 세로 59초 숏폼. 같은 녹화본에 훅·문제·해결 스토리, 모션 자막, 기기 프레임, 배경음을 더한 버전. `build_shortform_v2.py`로 만든다. 배경음은 Mixkit 무료 음원 "Relaxation 05"(Stock Music Free License, 저작자 표시 불필요, https://mixkit.co/free-stock-music/ambient/ )를 빌드 시 `.cache/`에 내려받는다.
+- `docs/submission/video/shortform_pleos_v2.mp4` — 세로 59초 숏폼. 같은 녹화본에 훅·문제·해결 스토리, 모션 자막, 기기 프레임, 배경음을 더한 버전. `build_shortform_v2.py`로 만든다. 배경음은 Mixkit 무료 음원 "Dim The Lights"(Stock Music Free License, 저작자 표시 불필요, https://mixkit.co/free-stock-music/chillout/ )를 빌드 시 `.cache/`에 내려받는다. 다른 곡은 `BGM_ID=<id>`로 지정한다.
 - 만드는 법: 원본 webm을 두고 본편은 `N_END=72 N_LEARN=15 ./build_video_pleos.sh` (구간표 `segments_pleos.env`, 자막은 `render_text.swift`), 숏폼은 `/usr/bin/python3 build_shortform_v2.py`. 시간 단축 데모 빌드라 "계산 중" 20초·선라이즈 30초이고, 출발 대기 구간은 배속 처리했다.
 
 ## Virtual Console 시연 순서 (약 3분)

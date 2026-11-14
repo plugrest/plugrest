@@ -5,7 +5,7 @@ ponytail: 외부 모션 툴 없이 ffmpeg 식(overlay/scale eval=frame/fade alph
          배경음은 Mixkit 무료 음원(저작자 표시 불필요)을 .cache에 내려받아 쓴다(BGM_ID 환경변수로 교체). TTS 구간은 sidechaincompress로 덕킹.
 구성: 훅(키네틱 텍스트) → 문제 → 해결(기기 프레임 슬라이드 인) → 원탭 휴식(TTS, 칩) → 예측 → 선라이즈(밝기 바) → 깨움(TTS) → 학습 → 엔드카드
 """
-import os, subprocess, sys, tempfile
+import os, re, subprocess, sys, tempfile
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -127,10 +127,11 @@ class Scene:
         self.fc.append(f"[{self.last}][l{i}]overlay=x='{x}':y='{y}':eval=frame{en}[v{i}]"); self.last = f"v{i}"
     def render(self):
         out = os.path.join(T, f"{self.name}.mp4"); print("render", self.name, file=sys.stderr, flush=True)
-        if self.audio: afc = f"{self.audio},apad,atrim=0:{self.dur}[a]"
+        if self.audio: afc = f"{self.audio},apad=whole_dur={self.dur},atrim=0:{self.dur}[a]"
         else: afc = f"anullsrc=r=48000:cl=stereo,atrim=0:{self.dur}[a]"  # 그래프 안 소스(별도 lavfi 입력은 스케줄러 교착을 일으킴)
-        fc = ";".join(self.fc + [afc, f"[{self.last}]fps={FPS},format=yuv420p[vo]"])
-        run([*self.inputs, "-filter_complex", fc, "-map", "[vo]", "-map", "[a]", "-t", str(self.dur), *ENC, out])
+        # 길이는 그래프 안 trim으로 자른다: 출력 -t 는 영상이 끝나는 순간 오디오를 덜 흘린 채 끊어 음성 장면 오디오가 1~4초 짧아졌다(ffmpeg 9)
+        fc = ";".join(self.fc + [afc, f"[{self.last}]fps={FPS},format=yuv420p,trim=0:{self.dur}[vo]"])
+        run([*self.inputs, "-filter_complex", fc, "-map", "[vo]", "-map", "[a]", *ENC, out])
         return out
 
 def solid(sc):
@@ -179,16 +180,25 @@ def kenburns(sc, img, dark=0.5, zoom_per_frame=0.0006, pan=(0, 0)):
                  f"zoompan=z='min(1+{zoom_per_frame}*on,1.3)':x='iw/2-(iw/zoom/2)+{pan[0]}*on':y='ih/2-(ih/zoom/2)+{pan[1]}*on':d=1:s={W}x{H}:fps={FPS},"
                  f"drawbox=x=0:y=0:w={W}:h={H}:color=0x{BG}@{dark}:t=fill[kb]"); sc.base("kb")
 
-def device(sc, foot, start, end, speed, y0, rise=False, audio=False):
-    mp, _, dw, dh = ASSETS
-    i = sc.add_input(["-ss", str(start), "-t", str(end - start), "-i", foot])
+def device(sc, foot, start, end, speed, y0, rise=False, audio=False, more=()):
+    """more: 이어 붙일 추가 구간 [(start, end, speed), ...]. audio=True면 마지막 구간의 소리를 그 시작 시각에 맞춰 넣는다."""
+    mp, _, dw, dh = ASSETS; segs = [(start, end, speed), *more]; parts = []; at = 0.0
+    for k, (s0, s1, sp) in enumerate(segs):
+        i = sc.add_input(["-ss", str(s0), "-t", str(s1 - s0), "-i", foot])
+        sc.fc.append(f"[{i}:v]setpts=(PTS-STARTPTS)/{sp},fps={FPS}[p{k}]"); parts.append(f"[p{k}]")
+        if k < len(segs) - 1: at += (s1 - s0) / sp
     m = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", mp])
     # 앱 영역에서 상태바(0~100)와 내비바(1280~)를 뺀 가운데 1100x1180만, 둥근 모서리
-    sc.fc.append(f"[{i}:v]setpts=(PTS-STARTPTS)/{speed},fps={FPS},crop=1100:1180:303:100,scale={dw}:{dh}[app];[{m}:v]format=gray[mk];[app][mk]alphamerge[dev]")
+    sc.fc.append(f"{''.join(parts)}concat=n={len(parts)}:v=1:a=0,crop=1100:1180:303:100,scale={dw}:{dh}[app];[{m}:v]format=gray[mk];[app][mk]alphamerge[dev]")
     cp, M = ASSETS[1]; c = sc.add_input(["-loop", "1", "-framerate", str(FPS), "-t", str(sc.dur + 1), "-i", cp])
     sc.fc.append(f"[{c}:v]format=rgba,fade=t=in:st=0:d=0.3:alpha=1[card];[{sc.last}][card]overlay=x={(W-dw)//2-M}:y='({y_device(y0, rise)})-{M}':eval=frame[cd]")
     sc.fc.append(f"[cd][dev]overlay=x={(W-dw)//2}:y='{y_device(y0, rise)}':eval=frame[dv]"); sc.base("dv")
-    if audio: sc.audio = f"[{i}:a]asetpts=PTS-STARTPTS"
+    if audio:  # 음성은 wav로 먼저 뽑아 별도 입력으로 넣는다: 영상과 같은 mp4 입력에서 바로 쓰면 무거운 그래프에서 오디오가 몇 초 모자란 채 끝난다(ffmpeg 9)
+        ch = "[0:a]asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo"
+        if at > 0: ch += f"[tts];anullsrc=r=48000:cl=stereo:d={at:.3f}[sil];[sil][tts]concat=n=2:v=0:a=1"  # 마지막 구간 소리를 그 시작 시각까지 무음으로 지연
+        wav = os.path.join(T, f"{sc.name}_voice.wav"); s0, s1, _ = segs[-1]
+        run(["-ss", str(s0), "-t", str(s1 - s0), "-i", foot, "-filter_complex", f"{ch},apad=whole_dur={sc.dur},atrim=0:{sc.dur}[a]", "-map", "[a]", wav])
+        sc.audio = f"[{sc.add_input(['-i', wav])}:a]anull"
 
 def center(w): return "(W-w)/2"  # overlay 식: 팝(가변 폭)에도 가운데 유지
 
@@ -217,7 +227,7 @@ def build():
     scenes.append(sc); trans.append("fadeblack")
 
     # 2 문제: 줄마다 올라오며 등장, 마지막 줄 팝
-    sc = Scene("s2", 4.1); kenburns(sc, NW, dark=0.42, pan=(0, -0.5))
+    sc = Scene("s2", 3.8); kenburns(sc, NW, dark=0.42, pan=(0, -0.5))
     p, w, h = text_png("p1.png", [("충전하는 동안,", 80, WHITE, True)], shadow=True); sc.layer(p, center(w), 640, 0.2, "up")
     p, w, h = text_png("p2.png", [("시트는 손으로 젖히고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), 790, 1.0, "up")
     p, w, h = text_png("p3.png", [("알람은 폰으로 맞추고", 62, WHITE, "medium")], shadow=True); sc.layer(p, center(w), 880, 1.7, "up")
@@ -225,7 +235,7 @@ def build():
     scenes.append(sc); trans.append("slideup")
 
     # 3 해결: 기기 프레임이 튀어오르듯 등장 (A 47–59.5, 2배속)
-    sc = Scene("s3", 6.0); backdrop(sc); device(sc, F["A"], 47, 59.5, 2.1, DY, rise=True)
+    sc = Scene("s3", 5.6); backdrop(sc); device(sc, F["A"], 47, 59.5, 2.1, DY, rise=True)
     header(sc, "01", "출발 시각", [("출발 시각만 고르세요", 78, MINT, True)], 0.7, "pop")
     p, w, h = text_png("c3b.png", [("10분 후, 한 번 탭", 46, GRAY, "semibold")]); sc.layer(p, center(w), 350, 1.3, "up")
     scenes.append(sc); trans.append("smoothup")
@@ -238,7 +248,7 @@ def build():
     scenes.append(sc); trans.append("fade")
 
     # 5 예측 (A 130–178, 9.6배속): 숫자가 65→75로 올라가는 카운터
-    sc = Scene("s5", 4.6); backdrop(sc); device(sc, F["A"], 130, 178, 9.6, DY)
+    sc = Scene("s5", 4.3); backdrop(sc); device(sc, F["A"], 130, 178, 9.6, DY)
     header(sc, "03", "배터리 예측", [("충전 속도로", 56, GRAY, "medium"), ("출발 시 배터리를 예측", 72, WHITE, True)])
     t0, step = 2.4, 0.13
     for k, v in enumerate(range(65, 76)):
@@ -248,7 +258,7 @@ def build():
     scenes.append(sc); trans.append("smoothleft")
 
     # 6 선라이즈 (B 0–33, 4.7배속) + 차오르는 밝기 바와 빛나는 머리
-    sc = Scene("s6", 7.0); backdrop(sc, AMBER); device(sc, F["B"], 0, 33, 33 / 7.0, DY)
+    sc = Scene("s6", 6.4); backdrop(sc, AMBER); device(sc, F["B"], 0, 33, 33 / 6.4, DY)
     header(sc, "04", "선라이즈", [("깨울 때가 되면,", 56, GRAY, "medium"), ("조명을 천천히 밝혀요", 72, WHITE, True)])
     tp = rect_png("track.png", 900, 26, DARK); fp = rect_png("fill.png", 900, 26, AMBER)
     sc.layer(tp, 90, 1530, 0.8); sc.layer(fp, 90, 1530, 1.0, fade=0.05, grow=5.0)
@@ -263,13 +273,14 @@ def build():
     p, w, h = text_png("c7d.png", [("내리기 전 확인까지", 50, AMBER, True)]); sc.layer(p, center(w), 1520, 12.6, "up")
     scenes.append(sc); trans.append("smoothup")
 
-    # 8 학습 (B 80–93.5, 3배속)
-    # 두 번째 설정 → "휴식 모드 시작" 탭 → 두 번째 휴식이 시작되는 데까지 보여 주고 끝낸다 (B 100초쯤 탭)
-    sc = Scene("s8", 10.0); backdrop(sc); device(sc, F["B"], 80, 105, 2.5, DY)
+    # 8 학습 (B 80–101.5, 2.8배속 → 두 번째 휴식 시작) + (B 120.6–125.1, 1배속 → 목표 도달, TTS)
+    # 두 번째 설정 → "휴식 모드 시작" 탭(≈6.8초) → "계산 중" → 목표 80% 도달 화면과 음성까지 보여 주고 마무리한다
+    sc = Scene("s8", 12.2); backdrop(sc); device(sc, F["B"], 80, 101.5, 2.8, DY, audio=True, more=[(120.6, 125.1, 1)])
     header(sc, "06", "학습", [("두 번째부터는", 56, GRAY, "medium"), ("내 차의 속도를 기억", 72, WHITE, True)], 0.2)
-    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.4, "up", end=6.8)
-    p, w, h = text_png("c8c.png", [("이번에도 한 번 탭이면 끝.", 48, WHITE, True)]); sc.layer(p, center(w), 1540, 7.4, "up")
-    scenes.append(sc); trans.append("fade")
+    p, w, h = text_png("c8b.png", [("지난 충전 기준 약 15분", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 2.1, "up", end=6.0)
+    p, w, h = text_png("c8c.png", [("이번에도 한 번 탭이면 끝.", 48, WHITE, True)]); sc.layer(p, center(w), 1540, 6.6, "up", end=8.3)
+    p, w, h = text_png("c8d.png", [("목표에 닿으면 다시 깨워요.", 48, AMBER, True)]); sc.layer(p, center(w), 1540, 8.9, "up")
+    scenes.append(sc); trans.append(("fade", 1.0))  # 마지막 전환은 천천히
 
     # 9 엔드카드: 링이 그려지고 → 링 중앙에 이름 팝 → 슬로건 두 줄 계단식 → 해시태그
     sc = Scene("s9", 4.6); still(sc, endcard_bg())
@@ -286,18 +297,21 @@ def build():
     inputs = []; [inputs.extend(["-i", f]) for f in files]
     fc, cur, vlast, alast = [], durs[0], "0:v", "0:a"
     for k in range(1, len(files)):
-        off = round(cur - XF, 3)
-        fc.append(f"[{vlast}][{k}:v]xfade=transition={trans[k - 1]}:duration={XF}:offset={off}[xv{k}]")
-        fc.append(f"[{alast}][{k}:a]acrossfade=d={XF}:c1=tri:c2=tri[xa{k}]")
+        tr, d = trans[k - 1] if isinstance(trans[k - 1], tuple) else (trans[k - 1], XF)
+        off = round(cur - d, 3)
+        fc.append(f"[{vlast}][{k}:v]xfade=transition={tr}:duration={d}:offset={off}[xv{k}]")
+        fc.append(f"[{alast}][{k}:a]acrossfade=d={d}:c1=tri:c2=tri[xa{k}]")
         vlast, alast, cur = f"xv{k}", f"xa{k}", off + durs[k]
     total = round(cur, 3)
-    # 배경음: Mixkit 무료 음원(Stock Music Free License, 저작자 표시 불필요). 기본 749 "Relaxation 05"(플루트+하프, 밝고 안정적).
-    # 대안 419 "Pilates and Yoga"(잔잔한 피아노). 다른 곡: BGM_ID=<id> BGM_LUFS=<곡의 통합 라우드니스> 로 지정.
-    bid = os.environ.get("BGM_ID", "749"); lufs = float(os.environ.get("BGM_LUFS", {"749": -12.4, "419": -13.8}.get(bid, -14)))
+    # 배경음: Mixkit 무료 음원(Stock Music Free License, 저작자 표시 불필요). 기본 97 "Dim The Lights"(칠아웃, 밝고 안정적).
+    # 대안 443 "Serene View", 988 "Day Dreamin' with U", 749 "Relaxation 05"(플루트+하프), 419 "Pilates and Yoga"(피아노). BGM_ID=<id>로 지정하면 라우드니스는 자동 측정.
+    bid = os.environ.get("BGM_ID", "97")
     bgm = os.path.join(HERE, ".cache", f"mixkit-{bid}.mp3")
     if not os.path.exists(bgm):
         os.makedirs(os.path.dirname(bgm), exist_ok=True)
         subprocess.run(["curl", "-sSL", "-A", "Mozilla/5.0", "-o", bgm, f"https://assets.mixkit.co/music/{bid}/{bid}.mp3"], check=True)
+    er = subprocess.run(["ffmpeg", "-nostdin", "-i", bgm, "-af", "ebur128=framelog=quiet", "-f", "null", "-"], capture_output=True, text=True).stderr
+    lufs = float(re.search(r"I:\s+(-?[\d.]+) LUFS", er).group(1)); print(f"bgm {bid} {lufs} LUFS", file=sys.stderr)
     inputs += ["-i", bgm]
     m = len(files)
     fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-27 - lufs}dB[mus]")  # 곡은 -27 LUFS(음성보다 약 10dB 아래)로 깔고 덕킹
