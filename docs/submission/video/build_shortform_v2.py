@@ -2,7 +2,7 @@
 """숏폼 v2 (1080x1920, 약 55초) — Pleos 실녹화본(raw_pleos_A/B.webm)으로 스토리텔링 + 모션.
 실행: /usr/bin/python3 build_shortform_v2.py  (ffmpeg, Pillow 필요. 시스템 python3에 Pillow 있음)
 ponytail: 외부 모션 툴 없이 ffmpeg 식(overlay/scale eval=frame/fade alpha/zoompan/xfade)만 쓴다.
-         배경음은 make_bgm.py가 합성한 음악상자풍 아르페지오. TTS 구간은 sidechaincompress로 덕킹.
+         배경음은 Mixkit 무료 음원(저작자 표시 불필요)을 .cache에 내려받아 쓴다(BGM_ID 환경변수로 교체). TTS 구간은 sidechaincompress로 덕킹.
 구성: 훅(키네틱 텍스트) → 문제 → 해결(기기 프레임 슬라이드 인) → 원탭 휴식(TTS, 칩) → 예측 → 선라이즈(밝기 바) → 깨움(TTS) → 학습 → 엔드카드
 """
 import os, subprocess, sys, tempfile
@@ -291,14 +291,16 @@ def build():
         fc.append(f"[{alast}][{k}:a]acrossfade=d={XF}:c1=tri:c2=tri[xa{k}]")
         vlast, alast, cur = f"xv{k}", f"xa{k}", off + durs[k]
     total = round(cur, 3)
-    # 배경음(make_bgm.py) → TTS 사이드체인 덕킹
-    bgm = os.path.join(HERE, ".cache", "bgm.wav")
-    if not os.path.exists(bgm):  # make_bgm.py: 음악상자풍 아르페지오 + 패드, aecho 잔향
-        subprocess.run([sys.executable, os.path.join(HERE, "make_bgm.py"), bgm + ".raw.wav", str(int(total) + 4)], check=True)
-        run(["-i", bgm + ".raw.wav", "-af", "aecho=0.7:0.6:60|120|250:0.25|0.18|0.1,lowpass=f=5000,highpass=f=80,volume=0.9", bgm])
+    # 배경음: Mixkit 무료 음원(Stock Music Free License, 저작자 표시 불필요). 기본 749 "Relaxation 05"(플루트+하프, 밝고 안정적).
+    # 대안 419 "Pilates and Yoga"(잔잔한 피아노). 다른 곡: BGM_ID=<id> BGM_LUFS=<곡의 통합 라우드니스> 로 지정.
+    bid = os.environ.get("BGM_ID", "749"); lufs = float(os.environ.get("BGM_LUFS", {"749": -12.4, "419": -13.8}.get(bid, -14)))
+    bgm = os.path.join(HERE, ".cache", f"mixkit-{bid}.mp3")
+    if not os.path.exists(bgm):
+        os.makedirs(os.path.dirname(bgm), exist_ok=True)
+        subprocess.run(["curl", "-sSL", "-A", "Mozilla/5.0", "-o", bgm, f"https://assets.mixkit.co/music/{bid}/{bid}.mp3"], check=True)
     inputs += ["-i", bgm]
     m = len(files)
-    fc.append(f"[{m}:a]atrim=0:{total},afade=t=in:d=1.0,afade=t=out:st={total-3.0}:d=3.0,volume=0.45[mus]")
+    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-26 - lufs}dB[mus]")  # 곡을 약 -26 LUFS로 깔고 덕킹
     fc.append(f"[{alast}]asplit=2[voice][sc]")
     fc.append(f"[mus][sc]sidechaincompress=threshold=0.01:ratio=12:attack=40:release=700:makeup=1[duck]")
     fc.append(f"[voice][duck]amix=inputs=2:duration=first:normalize=0,volume=2.0,alimiter=limit=0.9[ao]")
