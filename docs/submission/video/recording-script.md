@@ -43,4 +43,7 @@ vc "/vehicle/body?window_fr=40"; vc "/vehicle/seat?kind=occupied&area=rear_left&
 - 하단 고정 자막: "시간 단축 데모 · Pleos Connect 에뮬레이터 v2.1 실녹화"
 
 ## 녹화 후
-- 원본은 `docs/submission/video/raw_pleos_01.mp4`로 저장(gitignore 대상). PM이 `build_video.sh`로 자막·컷 편집.
+- 2026-11-14 실제 녹화는 OBS 대신 **에뮬레이터 콘솔의 `screenrecord`**(소리 포함 webm, 최대 180초)로 두 구간(`raw_pleos_A.webm` 설정→휴식 시작, `raw_pleos_B.webm` 선라이즈→깨움→학습값)을 찍었다. 화면 조작은 `adb shell input tap` 좌표로 자동화(출발 시각은 "10분 후" 프리셋, SOC는 30초마다 +1%).
+  - scrcpy의 기기 오디오 캡처는 Pleos 온디바이스 TTS를 잡지 못한다(무음). 에뮬레이터 콘솔 녹화만 TTS가 들어간다.
+  - 콘솔 녹화 중에는 `uiautomator dump`가 실패하므로 텍스트 기반 탭 대신 좌표 탭을 쓴다.
+- 원본(gitignore 대상)에서 `N_END=72 N_LEARN=15 ./build_video_pleos.sh` → `demo_pleos_v1.mp4`(1920×1080, 약 2분)와 `shortform_pleos_v1.mp4`(1080×1920, 60초 이내). 구간표는 `segments_pleos.env`.

@@ -413,7 +413,7 @@ fun RestoringScreen(p: Phase.Restoring, s: VehicleState, now: Long, onCancel: ()
         HeaderRow(headerBadges, bg = C.surfaceRest, active = C.restText, muted = C.restTextDim, showBrand = false)
     }) { _ ->
         Spacer(Modifier.weight(0.6f))
-        Text(when (p.reason) { EndReason.DEPARTURE -> "출발 시각이에요"; EndReason.CHARGING_DONE -> "충전이 끝났어요"; else -> "목표 ${p.target}%에 닿았어요" }, style = T.headlineL, color = C.restText, textAlign = TextAlign.Center)
+        Text(when (p.reason) { EndReason.DEPARTURE -> "출발 시각이에요"; EndReason.CHARGING_DONE -> "충전이 끝났어요"; EndReason.TARGET_REACHED -> "목표 ${p.target}%에 닿았어요"; else -> "휴식을 끝낼게요" }, style = T.headlineL, color = C.restText, textAlign = TextAlign.Center)
         Spacer(Modifier.height(D.gap / 2))
         Text(if (p.reason == EndReason.TARGET_REACHED) "곧 원래대로 돌려놔요" else "배터리 ${s.soc ?: "--"}% · 곧 원래대로 돌려놔요", style = T.bodyL, color = C.restTextDim, textAlign = TextAlign.Center)
         Spacer(Modifier.height(D.section))

@@ -27,7 +27,7 @@
 [첨부]
 1. 접수양식(01 참가신청서 / 02 앱 소개 / 03 개인정보 동의 / 04 동의 확인 및 서명) — 접수양식_충전쉼표_draft.docx
 2. {선택} 앱 소개 시안 — 화면시안_충전쉼표.pdf
-3. 시연 영상 — demo_pleos_v1.mp4 (약 3분, Pleos Connect 에뮬레이터 실녹화·음성 안내 포함·시간 단축 데모) {녹화 전까지는 demo_fake_v1.mp4}
+3. 시연 영상 — demo_pleos_v1.mp4 (약 2분, Pleos Connect 에뮬레이터 v2.1 실녹화·앱 음성 안내 포함·시간 단축 데모)
 
 [선택 제출물 링크]
 - GitHub: https://github.com/plugrest/plugrest

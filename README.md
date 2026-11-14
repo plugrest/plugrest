@@ -92,6 +92,12 @@ cd plugrest/app                    # app/ 폴더가 Gradle 루트(단일 모듈)
 
 전체 11장은 `docs/design/screenshots/`, 설명이 붙은 PDF는 `docs/submission/화면시안_충전쉼표.pdf`.
 
+## 시연 영상
+
+- `docs/submission/video/demo_pleos_v1.mp4` — Pleos Connect 에뮬레이터 v2.1 실녹화, 약 2분, 앱 TTS 음성 포함. 출발 시각 모드 전체 흐름(설정 → 휴식 → 선라이즈 → 깨움·복원 → 하차 체크)과 두 번째 세션의 학습값(지난 충전 기준 약 15분)까지.
+- `docs/submission/video/shortform_pleos_v1.mp4` — 같은 녹화본의 세로 60초 컷(숏폼용).
+- 만드는 법: 원본 webm을 두고 `N_END=72 N_LEARN=15 ./build_video_pleos.sh` (구간표 `segments_pleos.env`, 자막은 `render_text.swift`). 시간 단축 데모 빌드라 "계산 중" 20초·선라이즈 30초이고, 출발 대기 구간은 배속 처리했다.
+
 ## Virtual Console 시연 순서 (약 3분)
 
 | # | Virtual Console 조작 | 앱에서 확인할 것 |
