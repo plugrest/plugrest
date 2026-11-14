@@ -104,7 +104,7 @@ def y_device(y0, rise):                          # 등장 + 느린 부유
 
 class Scene:
     def __init__(self, name, dur):
-        self.name, self.dur, self.inputs, self.fc, self.n, self.last, self.audio = name, dur, [], [], 0, None, None
+        self.name, self.dur, self.inputs, self.fc, self.n, self.last, self.audio, self.voice = name, dur, [], [], 0, None, None, None
     def add_input(self, args):
         self.inputs += args; self.n += 1; return self.n - 1
     def base(self, label): self.last = label
@@ -198,7 +198,7 @@ def device(sc, foot, start, end, speed, y0, rise=False, audio=False, more=()):
         if at > 0: ch += f"[tts];anullsrc=r=48000:cl=stereo:d={at:.3f}[sil];[sil][tts]concat=n=2:v=0:a=1"  # 마지막 구간 소리를 그 시작 시각까지 무음으로 지연
         wav = os.path.join(T, f"{sc.name}_voice.wav"); s0, s1, _ = segs[-1]
         run(["-ss", str(s0), "-t", str(s1 - s0), "-i", foot, "-filter_complex", f"{ch},apad=whole_dur={sc.dur},atrim=0:{sc.dur}[a]", "-map", "[a]", wav])
-        sc.audio = f"[{sc.add_input(['-i', wav])}:a]anull"
+        sc.audio = f"[{sc.add_input(['-i', wav])}:a]anull"; sc.voice = wav
 
 def center(w): return "(W-w)/2"  # overlay 식: 팝(가변 폭)에도 가운데 유지
 
@@ -209,6 +209,30 @@ def rect_png(name, w, h, color, radius=None):
 def glow_png(name, r, color, alpha=255):
     im = Image.new("RGBA", (r * 4, r * 4), (0, 0, 0, 0)); ImageDraw.Draw(im).ellipse((r, r, 3 * r, 3 * r), fill=color + (alpha,))
     im = im.filter(ImageFilter.GaussianBlur(r * 0.6)); p = os.path.join(T, name); im.save(p); return p, r * 4
+
+def speech_windows(wav, gain_db=20, gap=1.2):
+    """음성 wav에서 말하는 구간 [(start, end), ...]. 짧은 숨 구간(gap초 미만)은 하나로 합친다."""
+    er = subprocess.run(["ffmpeg", "-nostdin", "-i", wav, "-af", f"volume={gain_db}dB,silencedetect=n=-40dB:d=0.3", "-f", "null", "-"], capture_output=True, text=True).stderr
+    dur = float(re.search(r"Duration: (\d+):(\d+):([\d.]+)", er).group(3)) + 60 * float(re.search(r"Duration: (\d+):(\d+):([\d.]+)", er).group(2))
+    ev = [(k, float(v)) for k, v in re.findall(r"silence_(start|end): ([\d.]+)", er)]
+    cur, out = 0.0, []
+    for k, t in ev:
+        if k == "start":
+            if t > cur: out.append([cur, t])
+        else: cur = t
+    if cur < dur and (not ev or ev[-1][0] == "end"): out.append([cur, dur])
+    merged = []
+    for a, b in out:
+        if merged and a - merged[-1][1] < gap: merged[-1][1] = b
+        else: merged.append([a, b])
+    return [(a, b) for a, b in merged if b - a > 0.2]
+
+def duck_expr(wins, depth_db=5, down=1.0, up=2.5):
+    """음성 구간마다 down초에 걸쳐 depth_db만큼 내려갔다가 끝나면 up초에 걸쳐 되돌아오는 volume 식(사이드체인은 음절마다 펌핑해서 툭툭 끊긴다)."""
+    terms = [f"(clip((t-{a - down:.2f})/{down},0,1)*clip(({b + up:.2f}-t)/{up},0,1))" for a, b in wins]
+    m = terms[0]
+    for t in terms[1:]: m = f"max({m},{t})"
+    return f"pow(10,-{depth_db}/20*{m})"
 
 # ---------- 장면 ----------
 def build():
@@ -295,10 +319,10 @@ def build():
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
     # 장면 전환: xfade(장면마다 다른 전환) + acrossfade
     inputs = []; [inputs.extend(["-i", f]) for f in files]
-    fc, cur, vlast, alast = [], durs[0], "0:v", "0:a"
+    fc, cur, vlast, alast, starts = [], durs[0], "0:v", "0:a", [0.0]
     for k in range(1, len(files)):
         tr, d = trans[k - 1] if isinstance(trans[k - 1], tuple) else (trans[k - 1], XF)
-        off = round(cur - d, 3)
+        off = round(cur - d, 3); starts.append(off)
         fc.append(f"[{vlast}][{k}:v]xfade=transition={tr}:duration={d}:offset={off}[xv{k}]")
         fc.append(f"[{alast}][{k}:a]acrossfade=d={d}:c1=tri:c2=tri[xa{k}]")
         vlast, alast, cur = f"xv{k}", f"xa{k}", off + durs[k]
@@ -315,8 +339,10 @@ def build():
     inputs += ["-i", bgm]
     m = len(files)
     fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-24 - lufs}dB[mus]")  # 곡은 -24 LUFS로 깔고 음성 구간에서 4~5dB만 덕킹
-    fc.append(f"[{alast}]volume=20dB,asplit=2[voice][sc]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +20dB → 약 -19 LUFS
-    fc.append(f"[mus][sc]sidechaincompress=threshold=0.05:ratio=2.5:attack=100:release=1000:makeup=1[duck]")
+    fc.append(f"[{alast}]volume=20dB[voice]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +20dB → 약 -19 LUFS
+    wins = [(round(st + a, 2), round(st + b, 2)) for sc, st in zip(scenes, starts) if sc.voice for a, b in speech_windows(sc.voice)]
+    print("speech", wins, file=sys.stderr)
+    fc.append(f"[mus]volume='{duck_expr(wins)}':eval=frame[duck]")  # 음성 1초 전부터 서서히 내려가고 끝나면 2.5초에 걸쳐 복귀
     fc.append(f"[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[ao]")
     run([*inputs, "-filter_complex", ";".join(fc), "-map", f"[{vlast}]", "-map", "[ao]", "-t", str(total), *ENC, "-movflags", "+faststart", OUT])
     print(OUT, total, "s")
