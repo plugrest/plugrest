@@ -300,10 +300,10 @@ def build():
         subprocess.run(["curl", "-sSL", "-A", "Mozilla/5.0", "-o", bgm, f"https://assets.mixkit.co/music/{bid}/{bid}.mp3"], check=True)
     inputs += ["-i", bgm]
     m = len(files)
-    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-26 - lufs}dB[mus]")  # 곡을 약 -26 LUFS로 깔고 덕킹
-    fc.append(f"[{alast}]asplit=2[voice][sc]")
+    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-27 - lufs}dB[mus]")  # 곡은 -27 LUFS(음성보다 약 10dB 아래)로 깔고 덕킹
+    fc.append(f"[{alast}]volume=24dB,asplit=2[voice][sc]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +24dB → 약 -15.5 LUFS
     fc.append(f"[mus][sc]sidechaincompress=threshold=0.01:ratio=12:attack=40:release=700:makeup=1[duck]")
-    fc.append(f"[voice][duck]amix=inputs=2:duration=first:normalize=0,volume=2.0,alimiter=limit=0.9[ao]")
+    fc.append(f"[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[ao]")
     run([*inputs, "-filter_complex", ";".join(fc), "-map", f"[{vlast}]", "-map", "[ao]", "-t", str(total), *ENC, "-movflags", "+faststart", OUT])
     print(OUT, total, "s")
 
