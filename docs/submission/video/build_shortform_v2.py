@@ -314,9 +314,9 @@ def build():
     lufs = float(re.search(r"I:\s+(-?[\d.]+) LUFS", er).group(1)); print(f"bgm {bid} {lufs} LUFS", file=sys.stderr)
     inputs += ["-i", bgm]
     m = len(files)
-    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-27 - lufs}dB[mus]")  # 곡은 -27 LUFS(음성보다 약 10dB 아래)로 깔고 덕킹
-    fc.append(f"[{alast}]volume=24dB,asplit=2[voice][sc]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +24dB → 약 -15.5 LUFS
-    fc.append(f"[mus][sc]sidechaincompress=threshold=0.01:ratio=12:attack=40:release=700:makeup=1[duck]")
+    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-24 - lufs}dB[mus]")  # 곡은 -24 LUFS로 깔고 음성 구간에서 4~5dB만 덕킹
+    fc.append(f"[{alast}]volume=20dB,asplit=2[voice][sc]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +20dB → 약 -19 LUFS
+    fc.append(f"[mus][sc]sidechaincompress=threshold=0.05:ratio=2.5:attack=100:release=1000:makeup=1[duck]")
     fc.append(f"[voice][duck]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[ao]")
     run([*inputs, "-filter_complex", ";".join(fc), "-map", f"[{vlast}]", "-map", "[ao]", "-t", str(total), *ENC, "-movflags", "+faststart", OUT])
     print(OUT, total, "s")
