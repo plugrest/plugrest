@@ -11,18 +11,18 @@ BRAND="$PWD/../../design/brand"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 ENC=(-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -r 30 -c:a aac -b:a 128k -ar 48000 -ac 2)
 BG=0E0F12; W=F5F5F5; G=AAB0B6; M=43E0A0; A=FFC75A
-FOOT="시간 단축 데모 · Pleos Connect 에뮬레이터 v2.1 실녹화 · 음성 = 앱 TTS"
+FOOT="시간 단축 데모 / Pleos Connect 에뮬레이터 실녹화 / 음성은 앱 TTS"
 
 # ---------- 1) 자막·카드 PNG ----------
 cat > "$T/spec.txt" <<SPEC
-title_txt.png|1000|540|none|left|b130,$W,충전쉼표|44,$G,Plug & Rest|b54,$M,충전은 차가, 휴식은 당신이.|34,$A,$FOOT
-end.png|1920|1080|$BG|center|b90,$W,충전쉼표 (Plug & Rest)|b48,$A,알람은 차에 맡기세요.|44,$W,① 충전 중 원탭으로 시트·조명·공조를 휴식 상태로|44,$W,② 출발 시각이나 목표 배터리에 맞춰 조명을 천천히 밝히고 음성으로 깨움|44,$W,③ 10초 뒤 자동 복원 + 내리기 전 확인|44,$W,④ 두 번째 충전부터 지난 충전 기준으로 바로 예측|34,$M,Pleos Vehicle SDK (EvBattery · Seat · Light · HVAC) · TextToSpeech
-d1.png|640|1080|$BG|left|b26,$M,STEP 1 · 언제 깨울지 고르기|b48,$W,배터리 목표 또는\n출발 시각|28,$G,충전 중(주차 P)일 때만\n'휴식 설정'이 켜집니다.\n\n출발 시각은 5분 단위 휠이나\n10 · 30 · 60분 후 중에서 고릅니다.|24,$A,$FOOT
-d2.png|640|1080|$BG|left|b26,$M,STEP 2 · 원탭 휴식|b48,$W,시트 · 조명 · 공조를\n한 번에|28,$G,등받이 절반, 조명 낮춤, 실내등 끔,\n공조 22°C · 풍량 1단.\n\n차가 직접 말합니다.|26,$A,"출발까지 10분, 편히 쉬세요.\n시간에 맞춰 깨워 드릴게요."|24,$A,$FOOT
-d3.png|640|1080|$BG|left|b26,$M,STEP 3 · 출발 시 배터리|b48,$W,충전 속도를 보고\n출발 시 배터리 예측|28,$G,처음엔 지난 충전 기준 약 65%,\n실제 오르는 속도가 잡히면\n약 75%로 바꿔 보여 줍니다.\n추측 값은 쓰지 않습니다.|24,$A,$FOOT (5배속)
-d4.png|640|1080|$BG|left|b26,$M,STEP 4 · 선라이즈 기상|b48,$W,조명을 천천히\n밝혀 깨웁니다|28,$G,출발 전부터 앰비언트 밝기를\n조금씩 올리고 풍량을 한 단계 올립니다.\n알람 대신 해가 뜨듯이.|24,$A,$FOOT (3배속)
-d5.png|640|1080|$BG|left|b26,$M,STEP 5 · 출발 시각|b48,$W,시각이 되면 깨우고\n전부 원래대로|28,$G,10초 카운트다운 뒤 시트·조명·공조를\n복원하고, 내리기 전 확인할 것을\n알려 줍니다.|26,$A,"출발 시각입니다. 배터리 ${N_END}%.\n10초 후 시트를 원래대로 되돌립니다."|24,$A,$FOOT
-d6.png|640|1080|$BG|left|b26,$M,STEP 6 · 학습|b48,$W,두 번째부터는\n내 차의 속도를 기억|28,$G,설정 화면에 바로\n'지난 충전 기준 약 ${N_LEARN}분'.\n시작 음성에도 예상 시간이 붙습니다.|24,$A,$FOOT
+title_txt.png|1000|540|none|left|b130,$W,충전쉼표|44,$G,Plug & Rest|b54,$M,충전은 차가, 휴식은 당신이.|30,$A,$FOOT
+end.png|1920|1080|$BG|center|b90,$W,충전쉼표 (Plug & Rest)|b48,$A,알람은 차에 맡기세요.|44,$W,① 충전 중 원탭으로 시트, 조명, 공조를 휴식 상태로|44,$W,② 출발 시각이나 목표 배터리에 맞춰 조명을 천천히 밝히고 음성으로 깨움|44,$W,③ 10초 뒤 자동 복원 + 내리기 전 확인|44,$W,④ 두 번째 충전부터 지난 충전 기준으로 바로 예측|34,$M,Pleos Vehicle SDK (EvBattery, Seat, Light, HVAC), TextToSpeech
+d1.png|640|1080|$BG|left|b26,$M,STEP 1: 언제 깨울지 고르기|b48,$W,배터리 목표 또는\n출발 시각|28,$G,충전 중(주차 P)일 때만\n'휴식 설정'이 켜집니다.\n\n출발 시각은 5분 단위 휠이나\n10, 30, 60분 후 중에서 고릅니다.|24,$A,$FOOT
+d2.png|640|1080|$BG|left|b26,$M,STEP 2: 원탭 휴식|b48,$W,시트, 조명, 공조를\n한 번에|28,$G,등받이 절반, 조명 낮춤, 실내등 끔,\n공조 22°C, 풍량 1단.\n\n차가 직접 말합니다.|26,$A,"출발까지 10분, 편히 쉬세요.\n시간에 맞춰 깨워 드릴게요."|24,$A,$FOOT
+d3.png|640|1080|$BG|left|b26,$M,STEP 3: 출발 시 배터리|b48,$W,충전 속도를 보고\n출발 시 배터리 예측|28,$G,처음엔 지난 충전 기준 약 65%,\n실제 오르는 속도가 잡히면\n약 75%로 바꿔 보여 줍니다.\n추측 값은 쓰지 않습니다.|24,$A,$FOOT (5배속)
+d4.png|640|1080|$BG|left|b26,$M,STEP 4: 선라이즈 기상|b48,$W,조명을 천천히\n밝혀 깨웁니다|28,$G,출발 전부터 앰비언트 밝기를\n조금씩 올리고 풍량을 한 단계 올립니다.\n알람 대신 해가 뜨듯이.|24,$A,$FOOT (3배속)
+d5.png|640|1080|$BG|left|b26,$M,STEP 5: 출발 시각|b48,$W,시각이 되면 깨우고\n전부 원래대로|28,$G,10초 카운트다운 뒤 시트, 조명, 공조를\n복원하고, 내리기 전 확인할 것을\n알려 줍니다.|26,$A,"출발 시각입니다. 배터리 ${N_END}%.\n10초 후 시트를 원래대로 되돌립니다."|24,$A,$FOOT
+d6.png|640|1080|$BG|left|b26,$M,STEP 6: 학습|b48,$W,두 번째부터는\n내 차의 속도를 기억|28,$G,설정 화면에 바로\n'지난 충전 기준 약 ${N_LEARN}분'.\n시작 음성에도 예상 시간이 붙습니다.|24,$A,$FOOT
 SPEC
 swift render_text.swift "$T/spec.txt" "$T"
 
@@ -62,7 +62,7 @@ join() { local out=$1; shift; : > "$T/list.txt"; for f in "$@"; do echo "file '$
 source ./segments_pleos.env
 
 # ---------- 4) 시연 영상 ----------
-bgcard "$BRAND/keyvisual.png" 4 "$T/a0.mp4" "[0:v]scale=1920:-2,crop=1920:1080,format=yuv420p,drawbox=x=60:y=60:w=740:h=520:color=0x0E0F12@0.55:t=fill[b];[b][1:v]overlay=60:60" title_txt.png
+bgcard "$BRAND/keyvisual.png" 4 "$T/a0.mp4" "[0:v]scale=1920:-2,crop=1920:1080,format=yuv420p,drawbox=x=60:y=60:w=1000:h=540:color=0x0E0F12@0.55:t=fill[b];[b][1:v]overlay=60:60" title_txt.png
 seg A $A_WIZ1_S  $A_WIZ1_E  1 d1.png "$T/a1.mp4" demo   # 홈 → 휴식 설정 → 출발 시각
 seg A $A_WIZ2_S  $A_WIZ2_E  1 d1.png "$T/a2.mp4" demo   # 10분 후 → 다음 → 시작 직전
 seg A $A_START_S $A_START_E 1 d2.png "$T/a3.mp4" demo   # 시작 + TTS
