@@ -313,7 +313,7 @@ def build():
     p, w, h = text_png("e1.png", [("충전쉼표", 140, WHITE, True), ("Plug & Rest", 46, MINT, "semibold")], shadow=True); sc.layer(p, center(w), f"{CY}-h/2", 1.1, "pop")
     p, w, h = text_png("e2.png", [("충전은 차가,", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1140, 1.5, "up")
     p, w, h = text_png("e2b.png", [("휴식은 당신이.", 84, WHITE, True)], shadow=True); sc.layer(p, center(w), 1250, 1.75, "up")
-    p, w, h = text_png("e3.png", [("차가 알람이 됩니다.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.3, "pop")
+    p, w, h = text_png("e3.png", [("알람은 차에 맡기세요.", 52, AMBER, True)], shadow=True); sc.layer(p, center(w), 1420, 2.3, "pop")
     scenes.append(sc)
 
     files = [s.render() for s in scenes]; durs = [s.dur for s in scenes]
