@@ -98,8 +98,8 @@ def x_right(x0, start, d=0.5, over=16):          # 오른쪽 밖에서 들어옴
     return f"{x0}+({W}-{x0})*(1-{E(start, d)})-{over}*sin({U(start, d)}*PI)"
 def s_pop(start, d=0.38, over=0.10):             # 0.5→1.1→1.0 팝
     return f"(0.5+0.5*{E(start, d)}+{over}*sin({U(start, d)}*PI))"
-def y_device(y0, rise):                          # 등장 + 느린 부유
-    f = f"+5*sin(2*PI*t/3.5)"
+def y_device(y0, rise):                          # 등장(부유 흔들림은 뺐다: 화면이 위아래로 흔들려 보인다는 피드백)
+    f = ""
     return (f"{y0}+({H}-{y0})*(1-{E(0, 0.8)})-26*sin({U(0, 0.8)}*PI){f}") if rise else f"{y0}{f}"
 
 class Scene:
@@ -327,18 +327,20 @@ def build():
         fc.append(f"[{alast}][{k}:a]acrossfade=d={d}:c1=tri:c2=tri[xa{k}]")
         vlast, alast, cur = f"xv{k}", f"xa{k}", off + durs[k]
     total = round(cur, 3)
-    # 배경음: Mixkit 무료 음원(Stock Music Free License, 저작자 표시 불필요). 기본 97 "Dim The Lights"(칠아웃, 밝고 안정적).
-    # 대안 443 "Serene View", 988 "Day Dreamin' with U", 749 "Relaxation 05"(플루트+하프), 419 "Pilates and Yoga"(피아노). BGM_ID=<id>로 지정하면 라우드니스는 자동 측정.
-    bid = os.environ.get("BGM_ID", "97")
+    # 배경음: Mixkit 무료 음원(Stock Music Free License, 저작자 표시 불필요). 기본 551 "Home"(드림팝, 사용자 청취 선택).
+    # 대안 97 "Dim The Lights"(칠아웃), 443 "Serene View", 988 "Day Dreamin' with U", 749 "Relaxation 05"(플루트+하프), 419 "Pilates and Yoga"(피아노). BGM_ID=<id>로 지정하면 라우드니스는 자동 측정.
+    bid = os.environ.get("BGM_ID", "551")
     bgm = os.path.join(HERE, ".cache", f"mixkit-{bid}.mp3")
     if not os.path.exists(bgm):
         os.makedirs(os.path.dirname(bgm), exist_ok=True)
         subprocess.run(["curl", "-sSL", "-A", "Mozilla/5.0", "-o", bgm, f"https://assets.mixkit.co/music/{bid}/{bid}.mp3"], check=True)
-    er = subprocess.run(["ffmpeg", "-nostdin", "-i", bgm, "-af", "ebur128=framelog=quiet", "-f", "null", "-"], capture_output=True, text=True).stderr
+    ss = float(os.environ.get("BGM_SS", {"551": 30}.get(bid, 0)))  # 곡 시작 오프셋(551 "Home"은 앞 30초가 조용한 빌드업)
+    pre = "aresample=48000,dynaudnorm=f=3000:g=15:m=10:p=0.9"  # 느린 레벨링: 크레셴도 곡도 배경으로 깔 수 있게 ±3dB 안으로
+    er = subprocess.run(["ffmpeg", "-nostdin", "-ss", str(ss), "-t", str(total), "-i", bgm, "-af", f"{pre},ebur128=framelog=quiet", "-f", "null", "-"], capture_output=True, text=True).stderr  # 실제로 쓰는 구간을 같은 체인으로 측정
     lufs = float(re.search(r"I:\s+(-?[\d.]+) LUFS", er).group(1)); print(f"bgm {bid} {lufs} LUFS", file=sys.stderr)
-    inputs += ["-i", bgm]
+    inputs += ["-ss", str(ss), "-i", bgm]
     m = len(files)
-    fc.append(f"[{m}:a]aresample=48000,atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-24 - lufs}dB[mus]")  # 곡은 -24 LUFS로 깔고 음성 구간에서 4~5dB만 덕킹
+    fc.append(f"[{m}:a]{pre},atrim=0:{total},afade=t=in:d=1.5,afade=t=out:st={total-3.0}:d=3.0,volume={-24 - lufs}dB[mus]")  # 곡은 -24 LUFS로 깔고 음성 구간에서 4~5dB만 덕킹
     fc.append(f"[{alast}]volume=20dB[voice]")  # 에뮬레이터 TTS 원본이 -39.5 LUFS라 +20dB → 약 -19 LUFS
     wins = [(round(st + a, 2), round(st + b, 2)) for sc, st in zip(scenes, starts) if sc.voice for a, b in speech_windows(sc.voice)]
     print("speech", wins, file=sys.stderr)
