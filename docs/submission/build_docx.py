@@ -85,7 +85,7 @@ body = {**{k: v for k, v in doc_proposal.items() if k <= 5}, 6: doc_s6[6]}
 EXCLUDE = {"14", "17"}  # PM 결정: 펫 모드·GS25 기사 → 결번으로 제외(재번호 안 함)
 refs = [r for r in re.findall(r"^\d+\. .*", open(f"{D}/submission/section6.md").read().split("## 7번")[1], re.M) if r.split(".")[0] not in EXCLUDE]
 body[7] = ["- 시연 영상: 첨부 파일 demo_pleos_v1.mp4 (약 2분, Pleos Connect 에뮬레이터 v2.1 실녹화·앱 음성 안내 포함·시간 단축 데모)", "- GitHub 저장소(APK 포함): https://github.com/plugrest/plugrest (APK: apk/충전쉼표_PlugRest_release.apk)", "- 앱 화면 시안: 첨부 파일 화면시안_충전쉼표.pdf (표지 + 화면 11장)", "", "**출처 목록** (본문의 [n] 번호와 연동)"] + refs
-body[8] = ["{숏폼 링크}"]
+body[8] = ["- YouTube Shorts: https://youtube.com/shorts/QiUdFf8ML6E (공개 게시, #HMG차량용앱개발공모전 해시태그 포함, 59초)"]
 
 shutil.copy(SRC, OUT)
 d = docx.Document(OUT)

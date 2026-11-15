@@ -34,7 +34,7 @@
   · APK: apk/충전쉼표_PlugRest_release.apk
   · {비공개 repo인 경우} 공지된 심사용 계정을 Collaborator로 초대했습니다.
 - 시연 영상: 첨부 3번 파일
-- 숏폼 (#HMG차량용앱개발공모전): {Instagram Reels 또는 YouTube Shorts URL}
+- 숏폼 (#HMG차량용앱개발공모전): https://youtube.com/shorts/QiUdFf8ML6E
 
 위 링크는 접수양식 02의 7번(참고자료)·8번(숏폼)에도 같이 적었습니다.
 
@@ -78,7 +78,7 @@
 - 수정 내용: {예: 02 앱 소개 4·6번 보완, APK 갱신}
 
 [첨부] 접수양식_충전쉼표_final.docx(01~04, 서명 포함), {선택} 화면시안_충전쉼표.pdf, 시연 영상 demo_pleos_v1.mp4
-[링크] GitHub https://github.com/plugrest/plugrest / APK apk/충전쉼표_PlugRest_release.apk / 숏폼 {URL}
+[링크] GitHub https://github.com/plugrest/plugrest / APK apk/충전쉼표_PlugRest_release.apk / 숏폼 https://youtube.com/shorts/QiUdFf8ML6E
 
 감사합니다.
 {성명} 드림
